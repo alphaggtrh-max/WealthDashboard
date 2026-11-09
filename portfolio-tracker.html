@@ -223,6 +223,15 @@ footer{color:var(--muted);font-size:12.5px;margin-top:24px;text-align:center}
 
 #toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,24px);opacity:0;background:var(--text);color:var(--bg);padding:11px 18px;border-radius:12px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.3);transition:opacity .3s,transform .4s cubic-bezier(.2,.9,.3,1.2);z-index:60;pointer-events:none;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
+#toast.act{pointer-events:auto;display:flex;gap:14px;align-items:center}
+#toast button{background:transparent;border:1px solid color-mix(in srgb,var(--bg) 45%,transparent);color:var(--bg);padding:3px 14px;border-radius:99px;font-weight:600}
+#toast button:hover{box-shadow:none;background:color-mix(in srgb,var(--bg) 18%,transparent)}
+.banner{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:color-mix(in srgb,var(--warn) 11%,var(--card));border:1px solid color-mix(in srgb,var(--warn) 45%,var(--line));border-radius:14px;padding:12px 16px;margin-bottom:16px;font-size:14px}
+.banner[hidden]{display:none}
+.banner .bb{display:flex;gap:8px}
+.rbbar{height:8px;border-radius:99px;background:var(--line);min-width:90px}
+.rbbar i{display:block;height:100%;border-radius:99px;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+.fx{width:18px;height:18px;padding:0;cursor:pointer;accent-color:var(--accent)}
 #fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:55}
 
 @media (max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.fgrid{grid-template-columns:repeat(2,1fr)}.zread{grid-template-columns:repeat(2,1fr)}}
@@ -264,6 +273,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:24px;text-align:center}
   <!-- ============ ÜBERSICHT ============ -->
   <main>
   <section class="view on" id="v-overview">
+    <div class="banner" id="backup" hidden><span id="backupTxt"></span><span class="bb"><button type="button" class="primary" id="backupNow">Jetzt exportieren</button><button type="button" id="backupLater">Später erinnern</button></span></div>
     <div class="kpis">
       <div class="kpi"><div class="lbl">Eingezahlt</div><div class="val" id="kPaid">–</div><div class="sub" id="kPaidSub"></div></div>
       <div class="kpi"><div class="lbl">Depotwert</div><div class="val" id="kValue">–</div><div class="sub" id="kValueSub"></div></div>
@@ -296,6 +306,22 @@ footer{color:var(--muted);font-size:12.5px;margin-top:24px;text-align:center}
         <div style="margin-top:14px"><button type="button" id="btnCatchup" class="primary">Fällige Raten nachtragen</button></div>
         <p class="hint">Trägt jede planmäßige, noch nicht gebuchte Rate mit der Soll-Verteilung nach.</p>
       </div>
+    </div>
+
+    <div class="card" id="rbCard">
+      <div class="cardhead"><h2>Rebalancing: Wohin mit der nächsten Rate?</h2><button type="button" class="primary" id="btnRb">Vorschlag buchen</button></div>
+      <p class="lead" id="rbLead"></p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Position</th><th class="r">Ist (Abweichung)</th><th class="r">Soll</th><th class="r">Standard-Split</th><th class="r">Vorschlag</th><th style="width:130px"></th></tr></thead>
+        <tbody id="rbBody"></tbody>
+      </table></div>
+      <p class="hint" id="rbHint"></p>
+    </div>
+
+    <div class="card" id="feeCard">
+      <h2>Gebühren-Überblick (geschätzt)</h2>
+      <div class="stats" id="feeStats"></div>
+      <p class="hint" id="feeHint"></p>
     </div>
   </section>
 
@@ -443,11 +469,11 @@ footer{color:var(--muted);font-size:12.5px;margin-top:24px;text-align:center}
     <div class="card">
       <div class="cardhead">
         <h2>Positionen &amp; Soll-Verteilung</h2>
-        <span class="badge" id="sumBadge"></span>
+        <span style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><label class="small" style="display:flex;gap:6px;align-items:center;margin:0">FX-Gebühr (%) <input id="setFx" inputmode="decimal" style="width:64px;padding:5px 8px"></label><span class="badge" id="sumBadge"></span></span>
       </div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>Position</th><th>Soll</th><th class="r">Eingezahlt</th><th class="r">Wert</th><th class="r">Rendite</th><th></th></tr></thead>
+          <thead><tr><th>Position</th><th>Soll</th><th title="Fremdwährung (z. B. USD): XTB berechnet die Umrechnungsgebühr">Fremdwährung</th><th class="r">Eingezahlt</th><th class="r">Wert</th><th class="r">Rendite</th><th></th></tr></thead>
           <tbody id="assetsBody"></tbody>
         </table>
       </div>
@@ -485,7 +511,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:24px;text-align:center}
 /* ================= Helfer ================= */
 const $=(s,el=document)=>el.querySelector(s);
 const $$=(s,el=document)=>Array.from(el.querySelectorAll(s));
-const KEY='portfolio-tracker-v1', THEME_KEY='portfolio-tracker-theme';
+const KEY='portfolio-tracker-v1', THEME_KEY='portfolio-tracker-theme', EXP_KEY='portfolio-tracker-export', SNOOZE_KEY='portfolio-tracker-snooze';
 const TAX=0.26375;
 const REDUCED=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
 const COLORS=['#2f6bff','#12b886','#f59f00','#7c5cff','#e64980','#15aabf','#fd7e14','#82c91e'];
@@ -558,7 +584,7 @@ function animateNumber(el,to,fmt,ms){
   if(REDUCED||start===to){ el.textContent=fmt(to); return; }
   const t0=performance.now();
   const step=t=>{
-    const p=Math.min(1,(t-t0)/ms), e=1-Math.pow(1-p,3);
+    const p=Math.max(0,Math.min(1,(t-t0)/ms)), e=1-Math.pow(1-p,3);
     el.textContent=fmt(start+(to-start)*e);
     if(p<1) el._raf=requestAnimationFrame(step);
   };
@@ -571,13 +597,13 @@ function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.im
 const DEFAULT_ASSETS=[
   {id:'a1',name:'Core MSCI World',target:74,color:'#2f6bff'},
   {id:'a2',name:'Core MSCI EM IMI',target:14,color:'#12b886'},
-  {id:'a3',name:'Alphabet',target:7,color:'#f59f00'},
-  {id:'a4',name:'Nu Holdings',target:5,color:'#7c5cff'}
+  {id:'a3',name:'Alphabet',target:7,color:'#f59f00',fx:true},
+  {id:'a4',name:'Nu Holdings',target:5,color:'#7c5cff',fx:true}
 ];
 const DEF_CALC={start:2600,growth:0,years:10,rate:5,fee:0.2,infl:2,vol:15,goal:100000,real:false,tf:30,allow:1000,crashPct:30,crashYear:3,seed:7};
 function fresh(){
   return {
-    settings:{monthly:900,lump:2600,startDate:todayISO()},
+    settings:{monthly:900,lump:2600,startDate:todayISO(),fxFee:0.5},
     calc:Object.assign({},DEF_CALC),
     assets:DEFAULT_ASSETS.map(a=>Object.assign({},a)),
     deposits:[],
@@ -592,7 +618,8 @@ function sanitize(o){
   const st={
     monthly:numOr(s0.monthly,f.settings.monthly,0,1e7),
     lump:numOr(s0.lump,f.settings.lump,0,1e9),
-    startDate:isDate(s0.startDate)?s0.startDate:todayISO()
+    startDate:isDate(s0.startDate)?s0.startDate:todayISO(),
+    fxFee:numOr(s0.fxFee,0.5,0,5)
   };
   const calc={
     start:numOr(c0.start,D.start,0,1e9), growth:numOr(c0.growth,D.growth,0,25),
@@ -606,7 +633,8 @@ function sanitize(o){
   const assets=o.assets.map((a,i)=>({
     id:String(a.id||uid()), name:String(a.name||'Position'),
     target:isFinite(Number(a.target))?Number(a.target):0,
-    color:okColor(a.color)?a.color:COLORS[i%COLORS.length]
+    color:okColor(a.color)?a.color:COLORS[i%COLORS.length],
+    fx:a.fx===undefined?!!DEFAULT_ASSETS.find(d=>d.id===String(a.id)&&d.fx):!!a.fx
   }));
   const ids=new Set(assets.map(a=>a.id));
   const deposits=(Array.isArray(o.deposits)?o.deposits:[])
@@ -814,7 +842,7 @@ function drawChart(el,cfg,animate){
   if(go){
     const r=el.querySelector('.reveal'), t0=performance.now(), dur=1400;
     const step=t=>{
-      const p=Math.min(1,(t-t0)/dur);
+      const p=Math.max(0,Math.min(1,(t-t0)/dur));
       r.setAttribute('width',String(W*(1-Math.pow(1-p,3))));
       if(p<1) el._raf=requestAnimationFrame(step);
     };
@@ -868,7 +896,7 @@ function playZ(){
   Z.playing=true; Z.full=false; updZBtn();
   const step=t=>{
     if(!Z.playing) return;
-    const p=Math.min(1,(t-t0)/dur), e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+    const p=Math.max(0,Math.min(1,(t-t0)/dur)), e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
     Z.h.setM(from+(n-from)*e);
     if(p<1) Z.raf=requestAnimationFrame(step);
     else { Z.playing=false; Z.full=true; updZBtn(); }
@@ -1048,9 +1076,63 @@ function renderDiscipline(){
   const b=$('#btnCatchup'); b.disabled=missing===0;
   b.textContent=missing?('Fällige Raten nachtragen ('+missing+')'):'Alles gebucht ✓';
 }
+function currentValues(c){
+  const cur={}; let date=null;
+  state.assets.forEach(a=>{ cur[a.id]=c.last?(c.last.values[a.id]||0):(c.paidBy[a.id]||0); });
+  if(c.last){ date=c.last.date; c.deposits.forEach(d=>{ if(d.date>c.last.date&&cur[d.assetId]!==undefined) cur[d.assetId]+=d.amount; }); }
+  return {cur:cur,useVal:!!c.last,date:date};
+}
+function rebalancePlan(c){
+  const R=state.settings.monthly, ok=R>0&&Math.abs(targetSum()-100)<=0.01;
+  const cv=currentValues(c), cur=cv.cur;
+  const V=state.assets.reduce((s,a)=>s+cur[a.id],0), T=V+R;
+  const need={}; let pos=0;
+  state.assets.forEach(a=>{ const n=Math.max(0,a.target/100*T-cur[a.id]); need[a.id]=n; pos+=n; });
+  let cents=state.assets.map(a=>pos>0?Math.round(need[a.id]/pos*R*100):Math.round(R*a.target));
+  const diff=Math.round(R*100)-cents.reduce((x,y)=>x+y,0);
+  if(diff!==0){ let ix=0; cents.forEach((v,i)=>{ if(v>cents[ix]) ix=i; }); cents[ix]+=diff; }
+  const rows=state.assets.map((a,i)=>({a:a,ist:V>0?cur[a.id]/V*100:0,soll:a.target,std:Math.round(R*a.target)/100,sug:cents[i]/100}));
+  return {ok:ok,R:R,rows:rows,useVal:cv.useVal,date:cv.date,V:V};
+}
+function renderRebalance(c,animate){
+  const plan=rebalancePlan(c), go=animate&&!REDUCED, btn=$('#btnRb'), body=$('#rbBody'), lead=$('#rbLead'), hint=$('#rbHint');
+  if(!plan.ok){
+    body.innerHTML=''; btn.disabled=true; hint.textContent='';
+    lead.innerHTML='<span class="warn">'+(plan.R>0?'Die Soll-Verteilung muss genau 100 % ergeben (siehe „Daten“).':'Lege unter „Daten“ eine monatliche Rate fest.')+'</span>';
+    return;
+  }
+  btn.disabled=false;
+  let basis;
+  if(plan.useVal){ const age=Math.round((noon()-parseISO(plan.date))/864e5); basis='Basis: Depotwerte vom '+fmtDate(plan.date)+(age>14?' (vor '+age+' Tagen, bitte aktualisieren)':''); }
+  else basis='Basis: bisher eingezahlte Beträge. Trage unter „Daten“ Depotwerte ein, damit Kursbewegungen berücksichtigt werden';
+  lead.textContent=basis+'. Rate: '+eur.format(plan.R)+'.';
+  body.innerHTML=plan.rows.map(r=>{
+    const dv=r.ist-r.soll, w=plan.R>0?r.sug/plan.R*100:0;
+    return '<tr><td><i class="dot" style="background:'+r.a.color+'"></i>'+esc(r.a.name)+'</td>'+
+      '<td class="r">'+pct(r.ist)+' <span class="muted small">('+sgn(dv)+pct(Math.abs(dv)).replace(' %',' pp')+')</span></td>'+
+      '<td class="r">'+pct(r.soll,0)+'</td><td class="r">'+eur.format(r.std)+'</td><td class="r"><b>'+eur.format(r.sug)+'</b></td>'+
+      '<td><div class="rbbar"><i data-w="'+w+'" style="background:'+r.a.color+';width:'+(go?0:w)+'%"></i></div></td></tr>';
+  }).join('');
+  if(go) rAF2(()=>{ $$('.rbbar i',body).forEach(i=>{ i.style.width=i.dataset.w+'%'; }); });
+  const same=plan.rows.every(r=>Math.abs(r.sug-r.std)<0.5);
+  hint.textContent=same?'Deine Verteilung liegt auf Kurs, der Vorschlag entspricht dem Standard-Split.':'Es wird nie verkauft: Positionen über ihrem Soll bekommen weniger oder 0 €, bis die Verteilung wieder passt.';
+}
+function renderFees(c){
+  const fx=state.settings.fxFee/100, cv=currentValues(c);
+  const fxA=state.assets.filter(a=>a.fx);
+  const paidFx=fxA.reduce((s,a)=>s+(c.paidBy[a.id]||0),0), valFx=fxA.reduce((s,a)=>s+cv.cur[a.id],0);
+  const base=cv.useVal?state.assets.reduce((s,a)=>s+cv.cur[a.id],0):c.total;
+  const box=$('#feeStats');
+  box.innerHTML='<div class="stat"><div class="l">FX-Gebühren bisher</div><div class="v">'+eur.format(paidFx*fx)+'</div></div>'+
+    '<div class="stat"><div class="l">Beim Verkauf zusätzlich (ca.)</div><div class="v">'+eur.format(valFx*fx)+'</div></div>'+
+    '<div class="stat"><div class="l">Fondskosten pro Jahr (ca. '+pct(state.calc.fee,2)+' TER)</div><div class="v">'+eur.format(base*state.calc.fee/100)+'</div></div>';
+  $('#feeHint').textContent=fxA.length
+    ?'FX-Gebühr '+pct(state.settings.fxFee,2)+' auf Käufe und Verkäufe von: '+fxA.map(a=>a.name).join(', ')+'. EUR-notierte Varianten sparen sie. Die Fondskosten stecken im Fondskurs und werden nicht separat abgebucht.'
+    :'Keine Position ist als Fremdwährung markiert. Hake sie unter „Daten“ bei den Positionen an, um die Umrechnungsgebühr zu sehen.';
+}
 function renderOverview(animate){
   const c=C;
-  renderKpis(c); renderDonut(c,animate); renderBars(c,animate); renderHistory(animate); renderMilestones(c,animate); renderDiscipline();
+  renderKpis(c); renderDonut(c,animate); renderBars(c,animate); renderHistory(animate); renderMilestones(c,animate); renderDiscipline(); renderRebalance(c,animate); renderFees(c); renderBackup();
 }
 
 /* ================= Rendering: Rechner ================= */
@@ -1243,7 +1325,7 @@ function renderAssets(c){
     if(val!=null&&ps>0){ const r=(val-ps)/ps*100; ret='<span class="'+(r>=0?'pos':'neg')+'">'+sgn(r)+pct(Math.abs(r),2)+'</span>'; }
     return '<tr><td><i class="dot" style="background:'+a.color+'"></i><input class="inl name" data-act="name" data-id="'+a.id+'" value="'+esc(a.name)+'"></td>'+
       '<td><input class="inl num" data-act="target" data-id="'+a.id+'" inputmode="decimal" value="'+fmtIn(a.target)+'"> %</td>'+
-      '<td class="r">'+eur.format(paid)+'</td><td class="r">'+(val==null?'–':eur.format(val))+'</td><td class="r">'+ret+'</td>'+
+      '<td><input type="checkbox" class="fx" data-act="fx" data-id="'+a.id+'"'+(a.fx?' checked':'')+' aria-label="Fremdwährung"></td><td class="r">'+eur.format(paid)+'</td><td class="r">'+(val==null?'–':eur.format(val))+'</td><td class="r">'+ret+'</td>'+
       '<td class="r"><button type="button" class="icon" data-act="delAsset" data-id="'+a.id+'" title="Position entfernen">✕</button></td></tr>';
   }).join('');
   const sel=$('#singleAsset'), cur=sel.value;
@@ -1261,7 +1343,7 @@ function renderDeposits(c){
 }
 function renderData(){
   const s=state.settings;
-  setVal($('#setMonthly'),fmtIn(s.monthly)); setVal($('#setLump'),fmtIn(s.lump)); setVal($('#setStart'),s.startDate);
+  setVal($('#setMonthly'),fmtIn(s.monthly)); setVal($('#setLump'),fmtIn(s.lump)); setVal($('#setFx'),fmtIn(s.fxFee)); setVal($('#setStart'),s.startDate);
   const sum=targetSum(), info=$('#planInfo');
   if(Math.abs(sum-100)>0.01) info.innerHTML='<span class="warn">Die Soll-Verteilung ergibt '+pct(sum,1)+', nicht 100 %. Passe sie unten bei den Positionen an.</span>';
   else info.innerHTML='Deine Rate verteilt sich so: '+state.assets.map(a=>'<b>'+eur.format(s.monthly*a.target/100)+'</b> '+esc(a.name)).join(' · ');
@@ -1302,8 +1384,29 @@ function showView(v,first){
 
 /* Feedback: Toast + Konfetti */
 function toast(msg){
-  const t=$('#toast'); t.textContent=msg; t.classList.add('on');
+  const t=$('#toast'); t.classList.remove('act'); t.textContent=msg; t.classList.add('on');
   clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('on'),3400);
+}
+function toastUndo(msg,prev){
+  const t=$('#toast'); t.textContent='';
+  const sp=document.createElement('span'); sp.textContent=msg;
+  const b=document.createElement('button'); b.type='button'; b.textContent='Rückgängig';
+  b.addEventListener('click',()=>{
+    try{ state=sanitize(JSON.parse(prev)); }catch(e){ return; }
+    save(); C=compute(); renderActive(true); toast('Wiederhergestellt');
+  });
+  t.append(sp,b); t.classList.add('on','act');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('on','act'),8000);
+}
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function renderBackup(){
+  const b=$('#backup'); if(!b) return;
+  const last=Number(lsGet(EXP_KEY))||0, snooze=Number(lsGet(SNOOZE_KEY))||0, now=Date.now();
+  const days=last?Math.floor((now-last)/864e5):null;
+  const due=state.deposits.length>0&&(!last||days>=30)&&now>snooze;
+  b.hidden=!due;
+  if(due) $('#backupTxt').textContent=last?'Dein letzter Export ist '+days+' Tage her. Sichere deine Daten, falls der Browser-Speicher gelöscht wird.':'Du hast noch nie exportiert. Sichere deine Daten, falls der Browser-Speicher gelöscht wird.';
 }
 function confetti(x,y,count){
   if(REDUCED) return;
@@ -1342,6 +1445,7 @@ function afterBook(totalBefore,srcEl,msg){
 /* Aktionen */
 function loadDemo(){
   if((state.deposits.length||state.snapshots.length)&&!confirm('Vorhandene Daten werden durch Demo-Daten ersetzt. Fortfahren?')) return;
+  const prevJSON=JSON.stringify(state);
   const s=fresh(), now=new Date();
   const start=new Date(now.getFullYear(),now.getMonth()-6,4,12);
   s.settings.startDate=iso(start);
@@ -1358,18 +1462,19 @@ function loadDemo(){
     const values={}; s.assets.forEach((a,i)=>{ values[a.id]=Math.round(vals[i]*100)/100; });
     s.snapshots.push({date:ds,values:values});
   }
-  state=s; save(); C=compute(); renderActive(true); toast('Demo-Daten geladen');
+  state=s; save(); C=compute(); renderActive(true); toastUndo('Demo-Daten geladen',prevJSON);
 }
 function doExport(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='portfolio-'+todayISO()+'.json';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  lsSet(EXP_KEY,String(Date.now())); renderBackup();
 }
 function doImport(file){
   const fr=new FileReader();
   fr.onload=()=>{
-    try{ state=sanitize(JSON.parse(fr.result)); save(); C=compute(); renderActive(true); toast('Import erfolgreich'); }
+    try{ const prev=JSON.stringify(state); state=sanitize(JSON.parse(fr.result)); save(); C=compute(); renderActive(true); toastUndo('Import erfolgreich',prev); }
     catch(e){ alert('Import fehlgeschlagen: '+e.message); }
   };
   fr.readAsText(file);
@@ -1383,12 +1488,23 @@ function isDark(){
 /* ================= Events ================= */
 $('#nav').addEventListener('click',e=>{ const b=e.target.closest('button[data-view]'); if(b&&b.dataset.view!==view) showView(b.dataset.view); });
 $('#btnDemo').addEventListener('click',loadDemo);
+$('#backupNow').addEventListener('click',doExport);
+$('#backupLater').addEventListener('click',()=>{ lsSet(SNOOZE_KEY,String(Date.now()+7*864e5)); renderBackup(); });
+$('#btnRb').addEventListener('click',e=>{
+  const plan=rebalancePlan(C); if(!plan.ok) return;
+  const use=plan.rows.filter(r=>r.sug>0);
+  if(!confirm('Rate von '+eur.format(plan.R)+' heute so buchen?\n'+use.map(r=>r.a.name+': '+eur.format(r.sug)).join('\n'))) return;
+  const before=state.deposits.reduce((s,d)=>s+d.amount,0), day=todayISO();
+  use.forEach(r=>state.deposits.push({id:uid(),date:day,assetId:r.a.id,amount:r.sug}));
+  afterBook(before,e.currentTarget,'Rate nach Rebalancing-Vorschlag gebucht');
+});
 $('#btnExport').addEventListener('click',doExport);
 $('#btnImport').addEventListener('click',()=>$('#fileImport').click());
 $('#fileImport').addEventListener('change',e=>{ if(e.target.files[0]) doImport(e.target.files[0]); e.target.value=''; });
 $('#btnReset').addEventListener('click',()=>{
   if(!confirm('Wirklich alle Daten löschen und neu starten?')) return;
-  state=fresh(); save(); C=compute(); renderActive(true);
+  const prev=JSON.stringify(state);
+  state=fresh(); save(); C=compute(); renderActive(true); toastUndo('Alle Daten zurückgesetzt',prev);
 });
 $('#btnTheme').addEventListener('click',()=>{
   const next=isDark()?'light':'dark';
@@ -1439,6 +1555,7 @@ function bindNum(sel,obj,key,min,max){
 }
 bindNum('#setMonthly','settings','monthly',0,1e7);
 bindNum('#setLump','settings','lump',0,1e9);
+bindNum('#setFx','settings','fxFee',0,5);
 $('#setStart').addEventListener('change',e=>{ if(isDate(e.target.value)){ state.settings.startDate=e.target.value; save(); } });
 $('#chipMonthly').addEventListener('click',()=>{ $('#bookAmount').value=fmtIn(state.settings.monthly); });
 $('#chipLump').addEventListener('click',()=>{ $('#bookAmount').value=fmtIn(state.settings.lump); });
@@ -1469,13 +1586,14 @@ $('#fSnap').addEventListener('submit',e=>{
   state.snapshots.push({date:date,values:values}); save(); C=compute(); renderActive(true); toast('Depotwert gespeichert');
 });
 $('#btnAddAsset').addEventListener('click',()=>{
-  state.assets.push({id:uid(),name:'Neue Position',target:0,color:COLORS[state.assets.length%COLORS.length]});
+  state.assets.push({id:uid(),name:'Neue Position',target:0,color:COLORS[state.assets.length%COLORS.length],fx:false});
   save(); C=compute(); renderActive(false);
 });
 $('#assetsBody').addEventListener('change',e=>{
   const t=e.target, act=t.dataset.act, a=state.assets.find(x=>x.id===t.dataset.id); if(!a) return;
   if(act==='name'){ a.name=t.value.trim()||a.name; }
   else if(act==='target'){ const v=parseNum(t.value); if(isFinite(v)&&v>=0&&v<=100) a.target=v; }
+  else if(act==='fx'){ a.fx=t.checked; }
   else return;
   save(); C=compute(); renderActive(false);
 });
@@ -1495,9 +1613,11 @@ document.addEventListener('click',e=>{
   if(b.dataset.act==='delAsset'){
     if(state.assets.length<=1){ alert('Mindestens eine Position muss bleiben.'); return; }
     if(state.deposits.some(d=>d.assetId===b.dataset.id)){ alert('Diese Position hat Buchungen. Lösche zuerst die zugehörigen Buchungen.'); return; }
-    state.assets=state.assets.filter(a=>a.id!==b.dataset.id); save(); C=compute(); renderActive(false);
+    const prev=JSON.stringify(state);
+    state.assets=state.assets.filter(a=>a.id!==b.dataset.id); save(); C=compute(); renderActive(false); toastUndo('Position entfernt',prev);
   } else if(b.dataset.act==='delDep'){
-    state.deposits=state.deposits.filter(d=>d.id!==b.dataset.id); save(); C=compute(); renderActive(false);
+    const prev=JSON.stringify(state);
+    state.deposits=state.deposits.filter(d=>d.id!==b.dataset.id); save(); C=compute(); renderActive(false); toastUndo('Buchung gelöscht',prev);
   }
 });
 // Donut-Hover (Delegation)
