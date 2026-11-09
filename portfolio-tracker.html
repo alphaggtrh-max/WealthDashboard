@@ -1521,7 +1521,7 @@ function loadDemo(){
   state=s; save(); C=compute(); renderActive(true); toastUndo('Demo-Daten geladen',prevJSON);
 }
 function doExport(){
-  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const blob=new Blob([JSON.stringify(Object.assign({},state,{budget:budgetData}),null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='portfolio-'+todayISO()+'.json';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
@@ -1530,7 +1530,7 @@ function doExport(){
 function doImport(file){
   const fr=new FileReader();
   fr.onload=()=>{
-    try{ const prev=JSON.stringify(state); state=sanitize(JSON.parse(fr.result)); save(); C=compute(); renderActive(true); toastUndo('Import erfolgreich',prev); }
+    try{ const prev=JSON.stringify(state), imported=JSON.parse(fr.result); state=sanitize(imported); if(imported.budget&&typeof imported.budget==='object'){ budgetData=Object.assign({income:0,savings:0,leisure:0,other:0,expenses:[]},imported.budget); if(!Array.isArray(budgetData.expenses)) budgetData.expenses=[]; } bSave(); save(); C=compute(); renderActive(true); toastUndo('Import erfolgreich',prev); }
     catch(e){ alert('Import fehlgeschlagen: '+e.message); }
   };
   fr.readAsText(file);
