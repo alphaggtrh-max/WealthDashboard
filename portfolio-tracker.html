@@ -267,6 +267,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:24px;text-align:center}
       <button type="button" data-view="overview" class="on">Übersicht</button>
       <button type="button" data-view="calc">Rechner</button>
       <button type="button" data-view="data">Daten</button>
+      <button type="button" data-view="budget">Budget</button>
     </nav>
   </div>
 
@@ -496,6 +497,41 @@ footer{color:var(--muted);font-size:12.5px;margin-top:24px;text-align:center}
           <tbody id="depBody"></tbody>
         </table>
       </div>
+    </div>
+  </section>
+  <section class="view" id="v-budget">
+    <div class="card">
+      <h2>Monatliches Budget</h2>
+      <div class="row">
+        <div><label for="bIncome">Nettoeinkommen pro Monat (€)</label><input id="bIncome" inputmode="decimal" placeholder="z. B. 1.500"></div>
+        <div><label for="bSavings">Sparen &amp; Investieren (€)</label><input id="bSavings" inputmode="decimal" placeholder="0"></div>
+        <div><label for="bLeisure">Freizeit (€)</label><input id="bLeisure" inputmode="decimal" placeholder="0"></div>
+      </div>
+      <div class="formline"><div><label for="bOther">Sonstiges / Rücklagen (€)</label><input id="bOther" inputmode="decimal" placeholder="0"></div></div>
+    </div>
+    <div class="card">
+      <div class="cardhead"><h2>Wiederkehrende Ausgaben</h2><span class="badge" id="bCount">0 Ausgaben</span></div>
+      <form id="bForm"><div class="formline">
+        <div><label for="bName">Bezeichnung</label><input id="bName" placeholder="z. B. Handyvertrag" required maxlength="60"></div>
+        <div><label for="bCategory">Kategorie</label><select id="bCategory"><option>Wohnen</option><option>Lebensmittel</option><option>Mobilität</option><option>Versicherungen</option><option>Abos &amp; Verträge</option><option>Gesundheit</option><option>Sonstiges</option></select></div>
+        <div><label for="bAmount">Monatlicher Betrag (€)</label><input id="bAmount" inputmode="decimal" placeholder="z. B. 49,99" required></div>
+        <button class="primary" type="submit">Hinzufügen</button>
+      </div></form>
+      <div class="tablewrap" style="margin-top:14px"><table><thead><tr><th>Ausgabe</th><th>Kategorie</th><th class="r">Monatlich</th><th></th></tr></thead><tbody id="bList"></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>Was bleibt dir monatlich?</h2>
+      <div class="stats">
+        <div class="stat"><div class="l">Nettoeinkommen</div><div class="v" id="bTotalIncome">–</div></div>
+        <div class="stat"><div class="l">Fixkosten</div><div class="v" id="bTotalExpenses">–</div></div>
+        <div class="stat"><div class="l">Nach Ausgaben übrig</div><div class="v" id="bAvailable">–</div></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="l">Sparen &amp; Investieren</div><div class="v" id="bShowSavings">–</div></div>
+        <div class="stat"><div class="l">Freizeit</div><div class="v" id="bShowLeisure">–</div></div>
+        <div class="stat"><div class="l">Noch nicht verplant</div><div class="v" id="bFree">–</div></div>
+      </div>
+      <p class="info" id="bSummary"></p>
     </div>
   </section>
   </main>
@@ -1350,12 +1386,32 @@ function renderData(){
   renderSnap(C); renderAssets(C); renderDeposits(C);
 }
 
+/* ================= Monatsbudget ================= */
+const BKEY='wealth-budget-v1';
+let budgetData={income:0,savings:0,leisure:0,other:0,expenses:[]};
+try{const saved=JSON.parse(localStorage.getItem(BKEY)||'null');if(saved&&typeof saved==='object')budgetData=Object.assign(budgetData,saved);if(!Array.isArray(budgetData.expenses))budgetData.expenses=[];}catch(e){}
+function bNum(v){let x=String(v||'').trim().replace(/\s|€/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');const n=Number(x);return Number.isFinite(n)&&n>=0?n:0;}
+function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catch(e){}}
+function renderBudget(){
+  const total=budgetData.expenses.reduce((a,x)=>a+x.amount,0),available=budgetData.income-total,free=available-budgetData.savings-budgetData.leisure-budgetData.other;
+  ['bIncome','bSavings','bLeisure','bOther'].forEach((id,i)=>{const v=[budgetData.income,budgetData.savings,budgetData.leisure,budgetData.other][i];setVal($('#'+id),fmtIn(v));});
+  $('#bCount').textContent=budgetData.expenses.length+' '+(budgetData.expenses.length===1?'Ausgabe':'Ausgaben');
+  $('#bList').innerHTML=budgetData.expenses.length?budgetData.expenses.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.category)+'</td><td class="r">'+eur.format(x.amount)+'</td><td class="r"><button type="button" class="icon" data-bdel="'+esc(x.id)+'">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Ausgaben eingetragen.</td></tr>';
+  $('#bTotalIncome').textContent=eur.format(budgetData.income);$('#bTotalExpenses').textContent=eur.format(total);$('#bAvailable').textContent=eur.format(available);$('#bShowSavings').textContent=eur.format(budgetData.savings);$('#bShowLeisure').textContent=eur.format(budgetData.leisure);$('#bFree').textContent=eur.format(free);
+  $('#bAvailable').classList.toggle('neg',available<0);$('#bFree').classList.toggle('neg',free<0);
+  $('#bSummary').textContent=budgetData.income>0?(available<0?'Deine Ausgaben übersteigen dein Einkommen um '+eur.format(-available)+'.':free<0?'Deine geplante Aufteilung übersteigt das verfügbare Budget um '+eur.format(-free)+'.':'Nach Fixkosten und deinen geplanten Beträgen bleiben '+eur.format(free)+' pro Monat frei.'):'Trage dein monatliches Nettoeinkommen ein, um dein Budget zu berechnen.';
+}
+['bIncome','bSavings','bLeisure','bOther'].forEach((id,i)=>$('#'+id).addEventListener('change',e=>{budgetData[['income','savings','leisure','other'][i]]=bNum(e.target.value);bSave();renderBudget();}));
+$('#bForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#bName').value.trim(),amount=bNum($('#bAmount').value);if(!name||amount<=0){alert('Bitte Bezeichnung und einen Betrag größer 0 eingeben.');return;}budgetData.expenses.push({id:uid(),name:name.slice(0,60),category:$('#bCategory').value,amount:amount});bSave();renderBudget();$('#bName').value='';$('#bAmount').value='';});
+$('#bList').addEventListener('click',e=>{const b=e.target.closest('[data-bdel]');if(!b)return;budgetData.expenses=budgetData.expenses.filter(x=>x.id!==b.dataset.bdel);bSave();renderBudget();});
+
 /* ================= Steuerung ================= */
 function renderActive(animate){
   if(animate===undefined) animate=true;
   C=compute();
   if(view==='overview') renderOverview(animate);
   else if(view==='calc') renderCalc(animate);
+  else if(view==='budget') renderBudget();
   else renderData();
 }
 let calcPending=0;
@@ -1632,7 +1688,7 @@ $('#bookDate').value=todayISO(); $('#singleDate').value=todayISO(); $('#snapDate
 $('#bookAmount').value=fmtIn(state.settings.monthly);
 (function(){
   const h=(location.hash||'').replace('#','');
-  showView(['overview','calc','data'].indexOf(h)>=0?h:'overview',true);
+  showView(['overview','calc','data','budget'].indexOf(h)>=0?h:'overview',true);
 })();
 })();
 </script>
