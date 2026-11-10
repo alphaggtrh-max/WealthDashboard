@@ -677,7 +677,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
       <h2>Was bleibt dir monatlich?</h2>
       <div class="stats">
         <div class="stat"><div class="l">Nettoeinkommen</div><div class="v" id="bTotalIncome">–</div></div>
-        <div class="stat"><div class="l">Fixkosten</div><div class="v" id="bTotalExpenses">–</div></div>
+        <div class="stat"><div class="l">Ausgaben gesamt</div><div class="v" id="bTotalExpenses">–</div></div>
         <div class="stat"><div class="l">Nach Ausgaben übrig</div><div class="v" id="bAvailable">–</div></div>
       </div>
       <div class="stats">
@@ -1644,7 +1644,8 @@ function bNum(v){let x=String(v||'').trim().replace(/\s|€/g,'');if(x.includes(
 function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catch(e){}}
 function renderBudget(){
   const monthIncomes=budgetData.incomes.filter(x=>x.month===budgetMonth),extra=monthIncomes.reduce((a,x)=>a+x.amount,0);
-  const income=budgetData.income+extra,total=budgetData.expenses.reduce((a,x)=>a+x.amount,0),available=income-total,free=available-budgetData.savings-budgetData.leisure-budgetData.other;
+  const extraSpent=monthIncomes.reduce((a,x)=>a+(x.spent||[]).reduce((v,z)=>v+z.amount,0),0);
+  const income=budgetData.income+extra,total=budgetData.expenses.reduce((a,x)=>a+x.amount,0)+extraSpent,available=income-total,free=available-budgetData.savings-budgetData.leisure-budgetData.other;
   const selected=monthIncomes.find(x=>x.id===$('#bSpendIncome').value)||monthIncomes[0]||null;
   ['bIncome','bSavings','bLeisure','bOther'].forEach((id,i)=>{const v=[budgetData.income,budgetData.savings,budgetData.leisure,budgetData.other][i];setVal($('#'+id),fmtIn(v));});
   setVal($('#bMonth'),budgetMonth);
