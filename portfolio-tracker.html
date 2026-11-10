@@ -647,8 +647,21 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
         <div><label for="bIncomeAmount">Betrag (€)</label><input id="bIncomeAmount" inputmode="decimal" placeholder="z. B. 250" required></div>
         <button class="primary" type="submit">Einkommen hinzufügen</button>
       </div></form>
-      <div class="tablewrap" style="margin-top:14px"><table><thead><tr><th>Einnahme</th><th class="r">Betrag</th><th></th></tr></thead><tbody id="bIncomeList"></tbody></table></div>
+      <div class="tablewrap" style="margin-top:14px"><table><thead><tr><th>Einnahme</th><th class="r">Erhalten</th><th class="r">Verwendet</th><th class="r">Übrig</th><th></th></tr></thead><tbody id="bIncomeList"></tbody></table></div>
       <p class="hint" id="bExtraTotal"></p>
+      <div class="subcard" style="margin-top:16px">
+        <h3>Zusätzliche Einnahme verbuchen</h3>
+        <p class="muted">Wähle eine Einnahme aus und erfasse, wofür du davon Geld ausgegeben hast.</p>
+        <form id="bSpendForm"><div class="formline">
+          <div><label for="bSpendIncome">Einnahme</label><select id="bSpendIncome" required></select></div>
+          <div><label for="bSpendName">Wofür ausgegeben?</label><input id="bSpendName" placeholder="z. B. Laptop, Restaurant" required maxlength="60"></div>
+          <div><label for="bSpendCategory">Kategorie</label><select id="bSpendCategory"><option>Wohnen</option><option>Lebensmittel</option><option>Mobilität</option><option>Shopping</option><option>Freizeit</option><option>Gesundheit</option><option>Sonstiges</option></select></div>
+          <div><label for="bSpendAmount">Betrag (€)</label><input id="bSpendAmount" inputmode="decimal" placeholder="z. B. 45" required></div>
+          <button class="primary" type="submit">Ausgabe verbuchen</button>
+        </div></form>
+        <div class="tablewrap" style="margin-top:14px"><table><thead><tr><th>Verwendung</th><th>Kategorie</th><th class="r">Betrag</th><th></th></tr></thead><tbody id="bSpendList"></tbody></table></div>
+      </div>
+      <div style="margin-top:20px"><h3>Wofür wurde das Zusatzeinkommen verwendet?</h3><div id="bSpendChart" role="img" aria-label="Diagramm der Ausgaben aus zusätzlichen Einkünften"></div></div>
     </div>
     <div class="card">
       <div class="cardhead"><h2>Wiederkehrende Ausgaben</h2><span class="badge" id="bCount">0 Ausgaben</span></div>
@@ -1632,10 +1645,19 @@ function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catc
 function renderBudget(){
   const monthIncomes=budgetData.incomes.filter(x=>x.month===budgetMonth),extra=monthIncomes.reduce((a,x)=>a+x.amount,0);
   const income=budgetData.income+extra,total=budgetData.expenses.reduce((a,x)=>a+x.amount,0),available=income-total,free=available-budgetData.savings-budgetData.leisure-budgetData.other;
+  const selected=monthIncomes.find(x=>x.id===$('#bSpendIncome').value)||monthIncomes[0]||null;
   ['bIncome','bSavings','bLeisure','bOther'].forEach((id,i)=>{const v=[budgetData.income,budgetData.savings,budgetData.leisure,budgetData.other][i];setVal($('#'+id),fmtIn(v));});
   setVal($('#bMonth'),budgetMonth);
-  $('#bIncomeList').innerHTML=monthIncomes.length?monthIncomes.map(x=>'<tr><td>'+esc(x.name)+'</td><td class="r">'+eur.format(x.amount)+'</td><td class="r"><button type="button" class="icon" data-bidel="'+esc(x.id)+'" title="Einnahme löschen">✕</button></td></tr>').join(''):'<tr><td colspan="3" class="muted">Für diesen Monat sind noch keine zusätzlichen Einkünfte erfasst.</td></tr>';
-  $('#bExtraTotal').textContent='Zusätzliche Einkünfte in diesem Monat: '+eur.format(extra);
+  $('#bIncomeList').innerHTML=monthIncomes.length?monthIncomes.map(x=>{const spent=(x.spent||[]).reduce((a,z)=>a+z.amount,0),left=x.amount-spent;return '<tr><td>'+esc(x.name)+'</td><td class="r">'+eur.format(x.amount)+'</td><td class="r">'+eur.format(spent)+'</td><td class="r">'+eur.format(left)+'</td><td class="r"><button type="button" class="icon" data-bidel="'+esc(x.id)+'" title="Einnahme löschen">✕</button></td></tr>';}).join(''):'<tr><td colspan="5" class="muted">Für diesen Monat sind noch keine zusätzlichen Einkünfte erfasst.</td></tr>';
+  $('#bExtraTotal').textContent='Zusätzliche Einkünfte: '+eur.format(extra)+' · Bereits verwendet: '+eur.format(monthIncomes.reduce((a,x)=>a+(x.spent||[]).reduce((v,z)=>v+z.amount,0),0));
+  $('#bSpendIncome').innerHTML=monthIncomes.length?monthIncomes.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+' · '+eur.format(x.amount)+'</option>').join(''):'<option value="">Zuerst eine zusätzliche Einnahme erfassen</option>';
+  if(selected) $('#bSpendIncome').value=selected.id;
+  $('#bSpendForm').querySelector('button[type="submit"]').disabled=!monthIncomes.length;
+  const spendRows=selected?(selected.spent||[]):[];
+  $('#bSpendList').innerHTML=spendRows.length?spendRows.map(z=>'<tr><td>'+esc(z.name)+'</td><td>'+esc(z.category)+'</td><td class="r">'+eur.format(z.amount)+'</td><td class="r"><button type="button" class="icon" data-bspdel="'+esc(selected.id)+'|'+esc(z.id)+'" title="Ausgabe löschen">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Für diese Einnahme wurden noch keine Ausgaben verbucht.</td></tr>';
+  const cats={};monthIncomes.forEach(x=>(x.spent||[]).forEach(z=>cats[z.category]=(cats[z.category]||0)+z.amount));
+  const catRows=Object.entries(cats).sort((a,b)=>b[1]-a[1]),spentAll=catRows.reduce((a,x)=>a+x[1],0),max=Math.max(1,...catRows.map(x=>x[1]));
+  $('#bSpendChart').innerHTML=catRows.length?'<div style="display:grid;gap:12px">'+catRows.map(([name,val])=>'<div><div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:5px"><span>'+esc(name)+'</span><b>'+eur.format(val)+'</b></div><div style="height:10px;border-radius:99px;background:var(--line);overflow:hidden"><div style="height:100%;width:'+(val/max*100)+'%;background:var(--accent);border-radius:99px"></div></div></div>').join('')+'<p class="hint">Insgesamt ausgegeben: '+eur.format(spentAll)+'</p></div>':'<p class="muted">Sobald du Ausgaben verbuchst, erscheint hier eine Aufteilung nach Kategorien.</p>';
   $('#bCount').textContent=budgetData.expenses.length+' '+(budgetData.expenses.length===1?'Ausgabe':'Ausgaben');
   $('#bList').innerHTML=budgetData.expenses.length?budgetData.expenses.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.category)+'</td><td class="r">'+eur.format(x.amount)+'</td><td class="r"><button type="button" class="icon" data-bdel="'+esc(x.id)+'">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Ausgaben eingetragen.</td></tr>';
   $('#bTotalIncome').textContent=eur.format(income);$('#bTotalExpenses').textContent=eur.format(total);$('#bAvailable').textContent=eur.format(available);$('#bShowSavings').textContent=eur.format(budgetData.savings);$('#bShowLeisure').textContent=eur.format(budgetData.leisure);$('#bFree').textContent=eur.format(free);
@@ -1645,6 +1667,10 @@ function renderBudget(){
 $('#bMonth').addEventListener('change',e=>{if(/^\d{4}-\d{2}$/.test(e.target.value)){budgetMonth=e.target.value;renderBudget();}});
 $('#bIncomeForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#bIncomeName').value.trim(),amount=bNum($('#bIncomeAmount').value);if(!name||amount<=0){alert('Bitte Bezeichnung und einen Betrag größer 0 eingeben.');return;}budgetData.incomes.push({id:uid(),month:budgetMonth,name:name.slice(0,60),amount:amount});bSave();renderBudget();$('#bIncomeName').value='';$('#bIncomeAmount').value='';});
 $('#bIncomeList').addEventListener('click',e=>{const b=e.target.closest('[data-bidel]');if(!b)return;budgetData.incomes=budgetData.incomes.filter(x=>x.id!==b.dataset.bidel);bSave();renderBudget();});
+$('#bSpendIncome').addEventListener('change',()=>renderBudget());
+$('#bSpendForm').addEventListener('submit',e=>{e.preventDefault();const inc=budgetData.incomes.find(x=>x.id===$('#bSpendIncome').value),name=$('#bSpendName').value.trim(),amount=bNum($('#bSpendAmount').value);if(!inc||!name||amount<=0){alert('Bitte Einnahme, Verwendungszweck und einen Betrag größer 0 auswählen.');return;}const used=(inc.spent||[]).reduce((a,z)=>a+z.amount,0);if(used+amount>inc.amount+0.001){alert('Der verbuchte Betrag übersteigt den verfügbaren Rest dieser Einnahme ('+eur.format(Math.max(0,inc.amount-used))+').');return;}if(!Array.isArray(inc.spent))inc.spent=[];inc.spent.push({id:uid(),name:name.slice(0,60),category:$('#bSpendCategory').value,amount});bSave();renderBudget();$('#bSpendName').value='';$('#bSpendAmount').value='';});
+$('#bSpendList').addEventListener('click',e=>{const b=e.target.closest('[data-bspdel]');if(!b)return;const [incomeId,spendId]=b.dataset.bspdel.split('|'),inc=budgetData.incomes.find(x=>x.id===incomeId);if(!inc)return;inc.spent=(inc.spent||[]).filter(z=>z.id!==spendId);bSave();renderBudget();});
+
 ['bIncome','bSavings','bLeisure','bOther'].forEach((id,i)=>$('#'+id).addEventListener('change',e=>{budgetData[['income','savings','leisure','other'][i]]=bNum(e.target.value);bSave();renderBudget();}));
 $('#bForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#bName').value.trim(),amount=bNum($('#bAmount').value);if(!name||amount<=0){alert('Bitte Bezeichnung und einen Betrag größer 0 eingeben.');return;}budgetData.expenses.push({id:uid(),name:name.slice(0,60),category:$('#bCategory').value,amount:amount});bSave();renderBudget();$('#bName').value='';$('#bAmount').value='';});
 $('#bList').addEventListener('click',e=>{const b=e.target.closest('[data-bdel]');if(!b)return;budgetData.expenses=budgetData.expenses.filter(x=>x.id!==b.dataset.bdel);bSave();renderBudget();});
