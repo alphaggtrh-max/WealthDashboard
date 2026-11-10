@@ -1787,7 +1787,7 @@ function doExport(){
 function doImport(file){
   const fr=new FileReader();
   fr.onload=()=>{
-    try{ const prev=JSON.stringify(state), imported=JSON.parse(fr.result); state=sanitize(imported); if(imported.budget&&typeof imported.budget==='object'){ budgetData=Object.assign({income:0,savings:0,leisure:0,other:0,expenses:[]},imported.budget); if(!Array.isArray(budgetData.expenses)) budgetData.expenses=[]; } bSave(); save(); C=compute(); renderActive(true); toastUndo('Import erfolgreich',prev); }
+    try{ const prev=JSON.stringify(state), imported=JSON.parse(fr.result); state=sanitize(imported); if(imported.budget&&typeof imported.budget==='object'){ budgetData=Object.assign({income:0,savings:0,leisure:0,other:0,expenses:[]},imported.budget); if(!Array.isArray(budgetData.expenses)) budgetData.expenses=[]; if(!Array.isArray(budgetData.incomes)) budgetData.incomes=[]; } bSave(); save(); C=compute(); renderActive(true); toastUndo('Import erfolgreich',prev); }
     catch(e){ alert('Import fehlgeschlagen: '+e.message); }
   };
   fr.readAsText(file);
