@@ -633,11 +633,22 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
     <div class="card">
       <h2>Monatliches Budget</h2>
       <div class="row">
-        <div><label for="bIncome">Nettoeinkommen pro Monat (€)</label><input id="bIncome" inputmode="decimal" placeholder="z. B. 1.500"></div>
+        <div><label for="bIncome">Festes Nettoeinkommen pro Monat (€)</label><input id="bIncome" inputmode="decimal" placeholder="z. B. 1.500"></div>
         <div><label for="bSavings">Sparen &amp; Investieren (€)</label><input id="bSavings" inputmode="decimal" placeholder="0"></div>
         <div><label for="bLeisure">Freizeit (€)</label><input id="bLeisure" inputmode="decimal" placeholder="0"></div>
       </div>
       <div class="formline"><div><label for="bOther">Sonstiges / Rücklagen (€)</label><input id="bOther" inputmode="decimal" placeholder="0"></div></div>
+    </div>
+    <div class="card">
+      <div class="cardhead"><h2>Zusätzliche Einkünfte</h2><div style="min-width:170px"><label for="bMonth">Monat auswählen</label><input id="bMonth" type="month"></div></div>
+      <p class="lead">Erfasse variable Einnahmen wie Bonuszahlungen, Nebenjobs oder Verkäufe separat für den jeweiligen Monat. Sie werden zum festen Einkommen addiert.</p>
+      <form id="bIncomeForm"><div class="formline">
+        <div><label for="bIncomeName">Bezeichnung</label><input id="bIncomeName" placeholder="z. B. Bonus, Nebenjob" required maxlength="60"></div>
+        <div><label for="bIncomeAmount">Betrag (€)</label><input id="bIncomeAmount" inputmode="decimal" placeholder="z. B. 250" required></div>
+        <button class="primary" type="submit">Einkommen hinzufügen</button>
+      </div></form>
+      <div class="tablewrap" style="margin-top:14px"><table><thead><tr><th>Einnahme</th><th class="r">Betrag</th><th></th></tr></thead><tbody id="bIncomeList"></tbody></table></div>
+      <p class="hint" id="bExtraTotal"></p>
     </div>
     <div class="card">
       <div class="cardhead"><h2>Wiederkehrende Ausgaben</h2><span class="badge" id="bCount">0 Ausgaben</span></div>
@@ -1612,19 +1623,28 @@ function renderData(){
 
 /* ================= Monatsbudget ================= */
 const BKEY='wealth-budget-v1';
-let budgetData={income:0,savings:0,leisure:0,other:0,expenses:[]};
-try{const saved=JSON.parse(localStorage.getItem(BKEY)||'null');if(saved&&typeof saved==='object')budgetData=Object.assign(budgetData,saved);if(!Array.isArray(budgetData.expenses))budgetData.expenses=[];}catch(e){}
+const currentBudgetMonth=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');};
+let budgetMonth=currentBudgetMonth();
+let budgetData={income:0,savings:0,leisure:0,other:0,expenses:[],incomes:[]};
+try{const saved=JSON.parse(localStorage.getItem(BKEY)||'null');if(saved&&typeof saved==='object')budgetData=Object.assign(budgetData,saved);if(!Array.isArray(budgetData.expenses))budgetData.expenses=[];if(!Array.isArray(budgetData.incomes))budgetData.incomes=[];}catch(e){}
 function bNum(v){let x=String(v||'').trim().replace(/\s|€/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');else if(/^\d{1,3}(\.\d{3})+$/.test(x))x=x.replace(/\./g,'');const n=Number(x);return Number.isFinite(n)&&n>=0?n:0;}
 function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catch(e){}}
 function renderBudget(){
-  const total=budgetData.expenses.reduce((a,x)=>a+x.amount,0),available=budgetData.income-total,free=available-budgetData.savings-budgetData.leisure-budgetData.other;
+  const monthIncomes=budgetData.incomes.filter(x=>x.month===budgetMonth),extra=monthIncomes.reduce((a,x)=>a+x.amount,0);
+  const income=budgetData.income+extra,total=budgetData.expenses.reduce((a,x)=>a+x.amount,0),available=income-total,free=available-budgetData.savings-budgetData.leisure-budgetData.other;
   ['bIncome','bSavings','bLeisure','bOther'].forEach((id,i)=>{const v=[budgetData.income,budgetData.savings,budgetData.leisure,budgetData.other][i];setVal($('#'+id),fmtIn(v));});
+  setVal($('#bMonth'),budgetMonth);
+  $('#bIncomeList').innerHTML=monthIncomes.length?monthIncomes.map(x=>'<tr><td>'+esc(x.name)+'</td><td class="r">'+eur.format(x.amount)+'</td><td class="r"><button type="button" class="icon" data-bidel="'+esc(x.id)+'" title="Einnahme löschen">✕</button></td></tr>').join(''):'<tr><td colspan="3" class="muted">Für diesen Monat sind noch keine zusätzlichen Einkünfte erfasst.</td></tr>';
+  $('#bExtraTotal').textContent='Zusätzliche Einkünfte in diesem Monat: '+eur.format(extra);
   $('#bCount').textContent=budgetData.expenses.length+' '+(budgetData.expenses.length===1?'Ausgabe':'Ausgaben');
   $('#bList').innerHTML=budgetData.expenses.length?budgetData.expenses.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.category)+'</td><td class="r">'+eur.format(x.amount)+'</td><td class="r"><button type="button" class="icon" data-bdel="'+esc(x.id)+'">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Ausgaben eingetragen.</td></tr>';
-  $('#bTotalIncome').textContent=eur.format(budgetData.income);$('#bTotalExpenses').textContent=eur.format(total);$('#bAvailable').textContent=eur.format(available);$('#bShowSavings').textContent=eur.format(budgetData.savings);$('#bShowLeisure').textContent=eur.format(budgetData.leisure);$('#bFree').textContent=eur.format(free);
+  $('#bTotalIncome').textContent=eur.format(income);$('#bTotalExpenses').textContent=eur.format(total);$('#bAvailable').textContent=eur.format(available);$('#bShowSavings').textContent=eur.format(budgetData.savings);$('#bShowLeisure').textContent=eur.format(budgetData.leisure);$('#bFree').textContent=eur.format(free);
   $('#bAvailable').classList.toggle('neg',available<0);$('#bFree').classList.toggle('neg',free<0);
-  $('#bSummary').textContent=budgetData.income>0?(available<0?'Deine Ausgaben übersteigen dein Einkommen um '+eur.format(-available)+'.':free<0?'Deine geplante Aufteilung übersteigt das verfügbare Budget um '+eur.format(-free)+'.':'Nach Fixkosten und deinen geplanten Beträgen bleiben '+eur.format(free)+' pro Monat frei.'):'Trage dein monatliches Nettoeinkommen ein, um dein Budget zu berechnen.';
+  $('#bSummary').textContent=income>0?(available<0?'Deine Ausgaben übersteigen dein Einkommen um '+eur.format(-available)+'.':free<0?'Deine geplante Aufteilung übersteigt das verfügbare Budget um '+eur.format(-free)+'.':'Nach Fixkosten und deinen geplanten Beträgen bleiben '+eur.format(free)+' für '+budgetMonth+' frei.'):'Trage dein festes monatliches Nettoeinkommen ein, um dein Budget zu berechnen.';
 }
+$('#bMonth').addEventListener('change',e=>{if(/^\d{4}-\d{2}$/.test(e.target.value)){budgetMonth=e.target.value;renderBudget();}});
+$('#bIncomeForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#bIncomeName').value.trim(),amount=bNum($('#bIncomeAmount').value);if(!name||amount<=0){alert('Bitte Bezeichnung und einen Betrag größer 0 eingeben.');return;}budgetData.incomes.push({id:uid(),month:budgetMonth,name:name.slice(0,60),amount:amount});bSave();renderBudget();$('#bIncomeName').value='';$('#bIncomeAmount').value='';});
+$('#bIncomeList').addEventListener('click',e=>{const b=e.target.closest('[data-bidel]');if(!b)return;budgetData.incomes=budgetData.incomes.filter(x=>x.id!==b.dataset.bidel);bSave();renderBudget();});
 ['bIncome','bSavings','bLeisure','bOther'].forEach((id,i)=>$('#'+id).addEventListener('change',e=>{budgetData[['income','savings','leisure','other'][i]]=bNum(e.target.value);bSave();renderBudget();}));
 $('#bForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#bName').value.trim(),amount=bNum($('#bAmount').value);if(!name||amount<=0){alert('Bitte Bezeichnung und einen Betrag größer 0 eingeben.');return;}budgetData.expenses.push({id:uid(),name:name.slice(0,60),category:$('#bCategory').value,amount:amount});bSave();renderBudget();$('#bName').value='';$('#bAmount').value='';});
 $('#bList').addEventListener('click',e=>{const b=e.target.closest('[data-bdel]');if(!b)return;budgetData.expenses=budgetData.expenses.filter(x=>x.id!==b.dataset.bdel);bSave();renderBudget();});
