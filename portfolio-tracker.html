@@ -151,12 +151,7 @@ output{font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
 /* Donut / Balken */
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle}
 .donutrow{display:flex;gap:26px;align-items:center;flex-wrap:wrap}
-.donutsvg{width:200px;height:200px;flex:none}
-.donutvisual{position:relative;border-radius:50%;overflow:hidden;transition:background .25s}
-.donutvisual::before{content:"";position:absolute;inset:12%;border-radius:50%;background:var(--card)}
-.donutcenter{position:absolute;inset:12%;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none}
-.donutcenter .dl{font-size:11px}
-.donutcenter .dv{font-size:18px}
+.donutsvg{width:200px;height:200px;flex:none}\n.donutvisual{position:relative;border-radius:50%;overflow:hidden}\n.donutvisual::before{content:"";position:absolute;inset:12%;border-radius:50%;background:var(--card)}\n.donutcenter{position:absolute;inset:12%;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none}\n.donutcenter .dl{font-size:11px}\n.donutcenter .dv{font-size:18px}
 .donutsvg.spin{animation:spinin 1.1s cubic-bezier(.2,.8,.2,1) both}
 @keyframes spinin{from{transform:rotate(-80deg) scale(.92);opacity:0}}
 .seg{transition:stroke-dasharray 1.1s cubic-bezier(.2,.8,.2,1),stroke-width .2s,opacity .2s;cursor:pointer}
@@ -1284,65 +1279,23 @@ function renderHero(c,animate){
   }
 }
 function assetChartColor(a){return /nu\s*holdings/i.test(String(a.name||''))?'#8b5cf6':a.color;}
-let donutTotal=0, donutSegs=[], donutHl=-2;
-function donutGradient(hl){
-  let cursor=0;
-  return 'conic-gradient(from 0deg,'+donutSegs.map((x,k)=>{
-    const start=cursor; cursor=k===donutSegs.length-1?100:cursor+x.p*100;
-    const col=(hl<0||x.i===hl)?x.a.color:'color-mix(in srgb,'+x.a.color+' 22%,transparent)';
-    return col+' '+start.toFixed(5)+'% '+cursor.toFixed(5)+'%';
-  }).join(',')+')';
-}
-function donutIndexAt(ev,el){
-  el=el||$('.donutvisual'); if(!el||!donutSegs.length) return -1;
-  const r=el.getBoundingClientRect(), rx=r.width/2, ry=r.height/2;
-  if(!rx||!ry)return -1;
-  const dx=(ev.clientX-(r.left+rx))/rx, dy=(ev.clientY-(r.top+ry))/ry;
-  const d=Math.hypot(dx,dy);
-  // Sichtbarer Ring: äußere 24 % des Kreises; die Mitte bleibt neutral.
-  if(d>1||d<0.76)return -1;
-  let a=Math.atan2(dy,dx)*180/Math.PI+90; if(a<0)a+=360;
-  const f=a/360; let cur=0;
-  for(const x of donutSegs){cur+=x.p;if(f<=cur+1e-9)return x.i;}
-  return donutSegs[donutSegs.length-1].i;
-}
 function renderDonut(c,animate){
-  const wrap=$('#donut'), cash=c.cash||0;
+  const wrap=$('#donut'), invested=c.total, cash=c.cash||0, total=invested+cash;
   const segs=[];
-  state.assets.forEach((a,i)=>{const amount=c.paidBy[a.id]||0;if(amount>0)segs.push({a:Object.assign({},a,{color:assetChartColor(a)}),i:i,amount:amount});});
-  if(cash>0)segs.push({a:{name:'Cash',color:'#ec4899'},i:state.assets.length,amount:cash});
-  // Gesamt = Summe der gezeigten Segmente, damit sich die Anteile immer zu 100 % schließen (kein graues Restsegment)
-  const total=segs.reduce((t,x)=>t+x.amount,0); donutTotal=total;
-  segs.forEach(x=>{x.p=total>0?x.amount/total:0;});
-  donutSegs=segs; donutHl=-2;
-  const chart='<div class="donutsvg donutvisual" role="img" aria-label="Portfolio-Aufteilung aus Wertpapieren und Cash" style="background:'+donutGradient(-1)+'"><div class="donutcenter"><span class="dl" id="dcL">Portfolio gesamt</span><strong class="dv" id="dcV">'+eur0.format(total)+'</strong></div></div>';
+  state.assets.forEach((a,i)=>{const amount=c.paidBy[a.id]||0,p=total>0?amount/total:0;if(p>0)segs.push({a:Object.assign({},a,{color:assetChartColor(a)}),i:i,p:p,amount:amount});});
+  if(cash>0){const p=cash/total;segs.push({a:{name:'Cash',color:'#ec4899'},i:state.assets.length,p:p,amount:cash});}
+  let cursor=0;const stops=segs.map(x=>{const start=cursor;cursor+=x.p*100;return x.a.color+' '+start.toFixed(5)+'% '+cursor.toFixed(5)+'%';}).join(',');
+  const chart='<div class="donutsvg donutvisual" role="img" aria-label="Portfolio-Aufteilung aus Wertpapieren und Cash" style="background:conic-gradient(from -90deg,'+stops+')"><div class="donutcenter"><span class="dl" id="dcL">Portfolio gesamt</span><strong class="dv" id="dcV">'+eur0.format(total)+'</strong></div></div>';
   const leg=segs.map(x=>'<li data-i="'+x.i+'"><i style="background:'+x.a.color+'"></i><span>'+esc(x.a.name)+'</span><b>'+pct(x.p*100)+'</b><em>'+eur.format(x.amount)+'</em></li>').join('');
   wrap.innerHTML='<div class="donutrow">'+chart+'<ul class="dlegend">'+leg+'</ul></div>'+(total>0?'':'<p class="hint">Noch keine Wertpapier-Einzahlungen oder Cash-Bestände erfasst. Buche unter „Daten“ oder „Budget“.</p>');
-  // Bind directly to the freshly rendered chart. This avoids delegated pointer events
-  // being lost when the dashboard replaces the donut markup during re-rendering.
-  const visual=$('.donutvisual',wrap);
-  if(visual){
-    const track=e=>{
-      const i=donutIndexAt(e,visual);
-      visual.style.cursor=i>=0?'pointer':'default';
-      hlDonut(i);
-    };
-    visual.addEventListener('mousemove',track);
-    visual.addEventListener('mouseleave',()=>hlDonut(-1));
-    visual.addEventListener('click',e=>{const i=donutIndexAt(e,visual);if(i>=0)hlDonut(i);});
-  }
-  $('.dlegend li[data-i]',wrap).forEach(item=>{
-    item.addEventListener('mouseenter',()=>hlDonut(Number(item.dataset.i)));
-  });
 }
 function hlDonut(i){
   const wrap=$('#donut');if(!wrap||!C)return;
-  if(i!==donutHl){ donutHl=i; const v0=$('.donutvisual',wrap); if(v0) v0.style.background=donutGradient(i); }
     $$('.dlegend li',wrap).forEach(x=>x.classList.toggle('hl',Number(x.dataset.i)===i));
   const l=$('#dcL',wrap),v=$('#dcV',wrap);if(!l||!v)return;
-  if(i<0){l.textContent='Portfolio gesamt';v.textContent=eur0.format(donutTotal);}
+  if(i<0){l.textContent='Portfolio gesamt';v.textContent=eur0.format(C.total+(C.cash||0));}
   else if(i===state.assets.length){l.textContent='Cash';v.textContent=eur.format(C.cash||0);}
-  else{const a=state.assets[i];l.textContent=a.name.length>16?a.name.slice(0,15)+'…':a.name;v.textContent=pct(donutTotal>0?(C.paidBy[a.id]||0)/donutTotal*100:0);}
+  else{const a=state.assets[i];l.textContent=a.name.length>16?a.name.slice(0,15)+'…':a.name;v.textContent=pct((C.total+(C.cash||0))>0?(C.paidBy[a.id]||0)/(C.total+(C.cash||0))*100:0);}
 }
 function renderBars(c,animate){
   const wrap=$('#bars'), total=c.total, go=animate&&!REDUCED;
@@ -2069,25 +2022,9 @@ document.addEventListener('click',e=>{
     state.deposits=state.deposits.filter(d=>d.id!==b.dataset.id); save(); C=compute(); renderActive(false); toastUndo('Buchung gelöscht',prev);
   }
 });
-// Donut-Hover: Ring und Legende reagieren unabhängig voneinander
-$('#donut').addEventListener('pointermove',e=>{
-  const v=e.target.closest('.donutvisual');
-  if(!v)return;
-  const i=donutIndexAt(e,v);
-  v.style.cursor=i>=0?'pointer':'default';
-  hlDonut(i);
-});
-$('#donut').addEventListener('click',e=>{
-  const v=e.target.closest('.donutvisual');
-  if(!v)return;
-  const i=donutIndexAt(e,v);
-  if(i>=0)hlDonut(i);
-});
-$('#donut').addEventListener('pointerover',e=>{
-  const item=e.target.closest('.dlegend li[data-i]');
-  if(item)hlDonut(Number(item.dataset.i));
-});
-$('#donut').addEventListener('pointerleave',()=>hlDonut(-1));
+// Donut-Hover (Delegation)
+$('#donut').addEventListener('mouseover',e=>{ const t=e.target.closest('[data-i]'); hlDonut(t?Number(t.dataset.i):-1); });
+$('#donut').addEventListener('mouseleave',()=>hlDonut(-1));
 
 let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ moveInd(); progress(); if(C) renderActive(false); },180); });
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(moveInd);
