@@ -1318,6 +1318,22 @@ function renderDonut(c,animate){
   const chart='<div class="donutsvg donutvisual" role="img" aria-label="Portfolio-Aufteilung aus Wertpapieren und Cash" style="background:'+donutGradient(-1)+'"><div class="donutcenter"><span class="dl" id="dcL">Portfolio gesamt</span><strong class="dv" id="dcV">'+eur0.format(total)+'</strong></div></div>';
   const leg=segs.map(x=>'<li data-i="'+x.i+'"><i style="background:'+x.a.color+'"></i><span>'+esc(x.a.name)+'</span><b>'+pct(x.p*100)+'</b><em>'+eur.format(x.amount)+'</em></li>').join('');
   wrap.innerHTML='<div class="donutrow">'+chart+'<ul class="dlegend">'+leg+'</ul></div>'+(total>0?'':'<p class="hint">Noch keine Wertpapier-Einzahlungen oder Cash-Bestände erfasst. Buche unter „Daten“ oder „Budget“.</p>');
+  // Bind directly to the freshly rendered chart. This avoids delegated pointer events
+  // being lost when the dashboard replaces the donut markup during re-rendering.
+  const visual=$('.donutvisual',wrap);
+  if(visual){
+    const track=e=>{
+      const i=donutIndexAt(e,visual);
+      visual.style.cursor=i>=0?'pointer':'default';
+      hlDonut(i);
+    };
+    visual.addEventListener('mousemove',track);
+    visual.addEventListener('mouseleave',()=>hlDonut(-1));
+    visual.addEventListener('click',e=>{const i=donutIndexAt(e,visual);if(i>=0)hlDonut(i);});
+  }
+  $('.dlegend li[data-i]',wrap).forEach(item=>{
+    item.addEventListener('mouseenter',()=>hlDonut(Number(item.dataset.i)));
+  });
 }
 function hlDonut(i){
   const wrap=$('#donut');if(!wrap||!C)return;
