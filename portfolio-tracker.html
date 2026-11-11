@@ -402,14 +402,15 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
       </div>
       <div class="spark" id="heroSpark"></div>
     </div>
-    <div class="ledger" style="--n:3">
+    <div class="ledger" style="--n:4">
       <div class="kpi"><div class="lbl">Eingezahlt</div><div class="val" id="kPaid">–</div><div class="sub" id="kPaidSub"></div></div>
+      <div class="kpi"><div class="lbl">Cash im Portfolio</div><div class="val" id="kCash">–</div><div class="sub">Ohne Renditeberechnung</div></div>
       <div class="kpi"><div class="lbl">Gewinn / Verlust</div><div class="val" id="kGain">–</div><div class="sub" id="kGainSub"></div></div>
       <div class="kpi"><div class="lbl">Nächste Sparrate</div><div class="val" id="kNext">–</div><div class="sub" id="kNextSub"></div><div class="mini" id="kNextRing"></div></div>
     </div>
 
     <div class="grid2">
-      <div class="card"><h2>Aufteilung (eingezahlt)</h2><div id="donut"></div></div>
+      <div class="card"><h2>Portfolio-Aufteilung inkl. Cash</h2><div id="donut"></div></div>
       <div class="card"><h2>Ist vs. Soll</h2><div id="bars"></div></div>
     </div>
 
@@ -655,7 +656,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
         <form id="bSpendForm"><div class="formline">
           <div><label for="bSpendIncome">Einnahme</label><select id="bSpendIncome" required></select></div>
           <div><label for="bSpendName">Wofür ausgegeben?</label><input id="bSpendName" placeholder="z. B. Laptop, Restaurant" required maxlength="60"></div>
-          <div><label for="bSpendCategory">Kategorie</label><select id="bSpendCategory"><option>Wohnen</option><option>Lebensmittel</option><option>Mobilität</option><option>Shopping</option><option>Freizeit</option><option>Gesundheit</option><option>Sonstiges</option></select></div>
+          <div><label for="bSpendCategory">Kategorie</label><select id="bSpendCategory"><option>Wohnen</option><option>Cash</option><option>Sparen</option><option>Lebensmittel</option><option>Mobilität</option><option>Shopping</option><option>Freizeit</option><option>Gesundheit</option><option>Sonstiges</option></select></div>
           <div><label for="bSpendAmount">Betrag (€)</label><input id="bSpendAmount" inputmode="decimal" placeholder="z. B. 45" required></div>
           <button class="primary" type="submit">Ausgabe verbuchen</button>
         </div></form>
@@ -876,7 +877,7 @@ function compute(){
     deposits.forEach(d=>{ if(d.date<=last.date&&paidBySnap[d.assetId]!==undefined) paidBySnap[d.assetId]+=d.amount; });
     paidAtSnap=state.assets.reduce((s,a)=>s+paidBySnap[a.id],0);
   }
-  return {deposits:deposits,paidBy:paidBy,total:total,snaps:snaps,last:last,value:value,valueBy:valueBy,paidBySnap:paidBySnap,paidAtSnap:paidAtSnap};
+  return {deposits:deposits,paidBy:paidBy,total:total,cash:budgetCashTotal(),snaps:snaps,last:last,value:value,valueBy:valueBy,paidBySnap:paidBySnap,paidAtSnap:paidAtSnap};
 }
 function targetSum(){ return state.assets.reduce((s,a)=>s+a.target,0); }
 function splitAmount(total){
@@ -1193,6 +1194,7 @@ function drawStack(el,sim,real){
 /* ================= Rendering: Übersicht ================= */
 function renderKpis(c){
   animateNumber($('#kPaid'),c.total,v=>eur.format(v));
+  animateNumber($('#kCash'),c.cash||0,v=>eur.format(v));
   $('#kPaidSub').textContent=c.deposits.length+' Buchung'+(c.deposits.length===1?'':'en');
   const kv=$('#kValue'), kg=$('#kGain'), pill=$('#heroDelta');
   if(c.last){
@@ -1258,33 +1260,27 @@ function renderHero(c,animate){
   }
 }
 function renderDonut(c,animate){
-  const wrap=$('#donut'), R=70, SW=24, CIRC=2*Math.PI*R, total=c.total, go=animate&&!REDUCED;
+  const wrap=$('#donut'), R=70, SW=24, CIRC=2*Math.PI*R, invested=c.total, cash=c.cash||0, total=invested+cash, go=animate&&!REDUCED;
   const segs=[]; let off=0;
-  state.assets.forEach((a,i)=>{ const p=total>0?(c.paidBy[a.id]||0)/total:0; segs.push({a:a,i:i,p:p,len:p*CIRC,off:off}); off+=p*CIRC; });
-  const visible=segs.filter(s=>s.p>0).length;
-  let svg='<svg viewBox="0 0 200 200" class="donutsvg'+(go?' spin':'')+'" role="img" aria-label="Aufteilung der Einzahlungen"><circle cx="100" cy="100" r="'+R+'" fill="none" style="stroke:var(--line)" stroke-width="'+SW+'"/>';
+  state.assets.forEach((a,i)=>{ const amount=c.paidBy[a.id]||0,p=total>0?amount/total:0; segs.push({a:a,i:i,p:p,amount:amount,len:p*CIRC,off:off}); off+=p*CIRC; });
+  if(cash>0){const p=cash/total;segs.push({a:{name:'Cash',color:'#a78bfa'},i:state.assets.length,p:p,amount:cash,len:p*CIRC,off:off});off+=p*CIRC;}
+  const visible=segs.filter(x=>x.p>0).length;
+  let svg='<svg viewBox="0 0 200 200" class="donutsvg'+(go?' spin':'')+'" role="img" aria-label="Portfolio-Aufteilung aus Wertpapieren und Cash"><circle cx="100" cy="100" r="'+R+'" fill="none" style="stroke:var(--line)" stroke-width="'+SW+'"/>';
   let n=0;
-  segs.forEach(s=>{
-    if(s.p<=0) return;
-    const fin=Math.max(0,s.len-(visible>1?2:0));
-    svg+='<circle class="seg" data-i="'+s.i+'" data-final="'+fin+'" cx="100" cy="100" r="'+R+'" fill="none" stroke="'+s.a.color+'" stroke-width="'+SW+'" stroke-dasharray="'+(go?0:fin)+' '+CIRC+'" stroke-dashoffset="'+(-s.off)+'" transform="rotate(-90 100 100)" style="transition-delay:'+(go?n*90:0)+'ms"/>';
-    n++;
-  });
-  svg+='<text class="dl" id="dcL" x="100" y="94" text-anchor="middle">Eingezahlt</text><text class="dv" id="dcV" x="100" y="117" text-anchor="middle">'+eur0.format(total)+'</text></svg>';
-  const leg=segs.map(s=>'<li data-i="'+s.i+'"><i style="background:'+s.a.color+'"></i><span>'+esc(s.a.name)+'</span><b>'+pct(s.p*100)+'</b><em>'+eur.format(c.paidBy[s.a.id]||0)+'</em></li>').join('');
-  wrap.innerHTML='<div class="donutrow">'+svg+'<ul class="dlegend">'+leg+'</ul></div>'+(total>0?'':'<p class="hint">Noch nichts eingezahlt. Buche unter „Daten“ deine erste Einzahlung oder lade die Demo.</p>');
-  if(go){
-    rAF2(()=>{ $$('.seg',wrap).forEach(s=>{ s.style.strokeDasharray=s.dataset.final+' '+CIRC; }); });
-    setTimeout(()=>{ $$('.seg',wrap).forEach(s=>{ s.style.transitionDelay='0ms'; }); },1600);
-  }
+  segs.forEach(x=>{if(x.p<=0)return;const fin=Math.max(0,x.len-(visible>1?2:0));svg+='<circle class="seg" data-i="'+x.i+'" data-final="'+fin+'" cx="100" cy="100" r="'+R+'" fill="none" stroke="'+x.a.color+'" stroke-width="'+SW+'" stroke-dasharray="'+(go?0:fin)+' '+CIRC+'" stroke-dashoffset="'+(-x.off)+'" transform="rotate(-90 100 100)" style="transition-delay:'+(go?n*90:0)+'ms"/>';n++;});
+  svg+='<text class="dl" id="dcL" x="100" y="94" text-anchor="middle">Portfolio gesamt</text><text class="dv" id="dcV" x="100" y="117" text-anchor="middle">'+eur0.format(total)+'</text></svg>';
+  const leg=segs.map(x=>'<li data-i="'+x.i+'"><i style="background:'+x.a.color+'"></i><span>'+esc(x.a.name)+'</span><b>'+pct(x.p*100)+'</b><em>'+eur.format(x.amount)+'</em></li>').join('');
+  wrap.innerHTML='<div class="donutrow">'+svg+'<ul class="dlegend">'+leg+'</ul></div>'+(total>0?'':'<p class="hint">Noch keine Wertpapier-Einzahlungen oder Cash-Bestände erfasst. Buche unter „Daten“ oder „Budget“.</p>');
+  if(go){rAF2(()=>{$$('.seg',wrap).forEach(x=>{x.style.strokeDasharray=x.dataset.final+' '+CIRC;});});setTimeout(()=>{$$('.seg',wrap).forEach(x=>{x.style.transitionDelay='0ms';});},1600);}
 }
 function hlDonut(i){
-  const wrap=$('#donut'); if(!wrap||!C) return;
-  $$('.seg',wrap).forEach(s=>{ const on=i<0||+s.dataset.i===i; s.style.opacity=on?1:.25; s.setAttribute('stroke-width',+s.dataset.i===i?30:24); });
-  $$('.dlegend li',wrap).forEach(li=>li.classList.toggle('hl',+li.dataset.i===i));
-  const l=$('#dcL',wrap), v=$('#dcV',wrap); if(!l||!v) return;
-  if(i<0){ l.textContent='Eingezahlt'; v.textContent=eur0.format(C.total); }
-  else { const a=state.assets[i]; l.textContent=a.name.length>16?a.name.slice(0,15)+'…':a.name; v.textContent=pct(C.total>0?(C.paidBy[a.id]||0)/C.total*100:0); }
+  const wrap=$('#donut');if(!wrap||!C)return;
+  $$('.seg',wrap).forEach(x=>{const on=i<0||Number(x.dataset.i)===i;x.style.opacity=on?1:.25;x.setAttribute('stroke-width',Number(x.dataset.i)===i?30:24);});
+  $$('.dlegend li',wrap).forEach(x=>x.classList.toggle('hl',Number(x.dataset.i)===i));
+  const l=$('#dcL',wrap),v=$('#dcV',wrap);if(!l||!v)return;
+  if(i<0){l.textContent='Portfolio gesamt';v.textContent=eur0.format(C.total+(C.cash||0));}
+  else if(i===state.assets.length){l.textContent='Cash';v.textContent=eur.format(C.cash||0);}
+  else{const a=state.assets[i];l.textContent=a.name.length>16?a.name.slice(0,15)+'…':a.name;v.textContent=pct((C.total+(C.cash||0))>0?(C.paidBy[a.id]||0)/(C.total+(C.cash||0))*100:0);}
 }
 function renderBars(c,animate){
   const wrap=$('#bars'), total=c.total, go=animate&&!REDUCED;
@@ -1642,6 +1638,8 @@ let budgetData={income:0,savings:0,leisure:0,other:0,expenses:[],incomes:[]};
 try{const saved=JSON.parse(localStorage.getItem(BKEY)||'null');if(saved&&typeof saved==='object')budgetData=Object.assign(budgetData,saved);if(!Array.isArray(budgetData.expenses))budgetData.expenses=[];if(!Array.isArray(budgetData.incomes))budgetData.incomes=[];}catch(e){}
 function bNum(v){let x=String(v||'').trim().replace(/\s|€/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');else if(/^\d{1,3}(\.\d{3})+$/.test(x))x=x.replace(/\./g,'');const n=Number(x);return Number.isFinite(n)&&n>=0?n:0;}
 function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catch(e){}}
+function isCashAllocation(z){return /^(cash|sparen|saving|savings)$/i.test(String(z.category||'').trim())||/(^|[^a-z])(cash|sparen|savings)([^a-z]|$)/i.test(String(z.name||''));}
+function budgetCashTotal(){return budgetData.incomes.reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0);}
 function renderBudget(){
   const monthIncomes=budgetData.incomes.filter(x=>x.month===budgetMonth),extra=monthIncomes.reduce((a,x)=>a+x.amount,0);
   const extraSpent=monthIncomes.reduce((a,x)=>a+(x.spent||[]).reduce((v,z)=>v+z.amount,0),0);
@@ -1653,12 +1651,14 @@ function renderBudget(){
   $('#bExtraTotal').textContent='Zusätzliche Einkünfte: '+eur.format(extra)+' · Bereits verwendet: '+eur.format(monthIncomes.reduce((a,x)=>a+(x.spent||[]).reduce((v,z)=>v+z.amount,0),0));
   $('#bSpendIncome').innerHTML=monthIncomes.length?monthIncomes.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+' · '+eur.format(x.amount)+'</option>').join(''):'<option value="">Zuerst eine zusätzliche Einnahme erfassen</option>';
   if(selected) $('#bSpendIncome').value=selected.id;
+  $('#bSpendCategory').value='Wohnen';
   $('#bSpendForm').querySelector('button[type="submit"]').disabled=!monthIncomes.length;
   const spendRows=selected?(selected.spent||[]):[];
   $('#bSpendList').innerHTML=spendRows.length?spendRows.map(z=>'<tr><td>'+esc(z.name)+'</td><td>'+esc(z.category)+'</td><td class="r">'+eur.format(z.amount)+'</td><td class="r"><button type="button" class="icon" data-bspdel="'+esc(selected.id)+'|'+esc(z.id)+'" title="Ausgabe löschen">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Für diese Einnahme wurden noch keine Ausgaben verbucht.</td></tr>';
-  const cats={};monthIncomes.forEach(x=>(x.spent||[]).forEach(z=>cats[z.category]=(cats[z.category]||0)+z.amount));
-  const catRows=Object.entries(cats).sort((a,b)=>b[1]-a[1]),spentAll=catRows.reduce((a,x)=>a+x[1],0),max=Math.max(1,...catRows.map(x=>x[1]));
-  $('#bSpendChart').innerHTML=catRows.length?'<div style="display:grid;gap:12px">'+catRows.map(([name,val])=>'<div><div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:5px"><span>'+esc(name)+'</span><b>'+eur.format(val)+'</b></div><div style="height:10px;border-radius:99px;background:var(--line);overflow:hidden"><div style="height:100%;width:'+(val/max*100)+'%;background:var(--accent);border-radius:99px"></div></div></div>').join('')+'<p class="hint">Insgesamt ausgegeben: '+eur.format(spentAll)+'</p></div>':'<p class="muted">Sobald du Ausgaben verbuchst, erscheint hier eine Aufteilung nach Kategorien.</p>';
+  const cats={};let cashSaved=0;monthIncomes.forEach(x=>(x.spent||[]).forEach(z=>{if(isCashAllocation(z))cashSaved+=z.amount;else cats[z.category]=(cats[z.category]||0)+z.amount;}));
+  if(cashSaved>0)cats['Cash / Sparen']=cashSaved;
+  const catRows=Object.entries(cats).sort((a,b)=>b[1]-a[1]),spentAll=catRows.reduce((a,x)=>a+x[1],0),actualSpent=catRows.filter(x=>x[0]!=='Cash / Sparen').reduce((a,x)=>a+x[1],0),max=Math.max(1,...catRows.map(x=>x[1])),chartCols=['#8b5cf6','#a78bfa','#7c3aed','#c4b5fd','#6d28d9','#ddd6fe','#9333ea'];
+  $('#bSpendChart').innerHTML=catRows.length?'<div style="display:grid;gap:12px">'+catRows.map(([name,val],i)=>'<div><div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:5px"><span>'+esc(name)+'</span><b>'+eur.format(val)+'</b></div><div style="height:10px;border-radius:99px;background:var(--line);overflow:hidden"><div style="height:100%;width:'+(val/max*100)+'%;background:'+chartCols[i%chartCols.length]+';border-radius:99px"></div></div></div>').join('')+'<p class="hint">Tatsächlich ausgegeben: '+eur.format(actualSpent)+(cashSaved>0?' · Davon als Cash/Sparen ins Portfolio: '+eur.format(cashSaved):'')+'</p></div>':'<p class="muted">Sobald du Ausgaben verbuchst, erscheint hier eine Aufteilung nach Kategorien.</p>';
   $('#bCount').textContent=budgetData.expenses.length+' '+(budgetData.expenses.length===1?'Ausgabe':'Ausgaben');
   $('#bList').innerHTML=budgetData.expenses.length?budgetData.expenses.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.category)+'</td><td class="r">'+eur.format(x.amount)+'</td><td class="r"><button type="button" class="icon" data-bdel="'+esc(x.id)+'">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Ausgaben eingetragen.</td></tr>';
   $('#bTotalIncome').textContent=eur.format(income);$('#bTotalExpenses').textContent=eur.format(total);$('#bAvailable').textContent=eur.format(available);$('#bShowSavings').textContent=eur.format(budgetData.savings);$('#bShowLeisure').textContent=eur.format(budgetData.leisure);$('#bFree').textContent=eur.format(free);
@@ -1669,8 +1669,8 @@ $('#bMonth').addEventListener('change',e=>{if(/^\d{4}-\d{2}$/.test(e.target.valu
 $('#bIncomeForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#bIncomeName').value.trim(),amount=bNum($('#bIncomeAmount').value);if(!name||amount<=0){alert('Bitte Bezeichnung und einen Betrag größer 0 eingeben.');return;}budgetData.incomes.push({id:uid(),month:budgetMonth,name:name.slice(0,60),amount:amount});bSave();renderBudget();$('#bIncomeName').value='';$('#bIncomeAmount').value='';});
 $('#bIncomeList').addEventListener('click',e=>{const b=e.target.closest('[data-bidel]');if(!b)return;budgetData.incomes=budgetData.incomes.filter(x=>x.id!==b.dataset.bidel);bSave();renderBudget();});
 $('#bSpendIncome').addEventListener('change',()=>renderBudget());
-$('#bSpendForm').addEventListener('submit',e=>{e.preventDefault();const inc=budgetData.incomes.find(x=>x.id===$('#bSpendIncome').value),name=$('#bSpendName').value.trim(),amount=bNum($('#bSpendAmount').value);if(!inc||!name||amount<=0){alert('Bitte Einnahme, Verwendungszweck und einen Betrag größer 0 auswählen.');return;}const used=(inc.spent||[]).reduce((a,z)=>a+z.amount,0);if(used+amount>inc.amount+0.001){alert('Der verbuchte Betrag übersteigt den verfügbaren Rest dieser Einnahme ('+eur.format(Math.max(0,inc.amount-used))+').');return;}if(!Array.isArray(inc.spent))inc.spent=[];inc.spent.push({id:uid(),name:name.slice(0,60),category:$('#bSpendCategory').value,amount});bSave();renderBudget();$('#bSpendName').value='';$('#bSpendAmount').value='';});
-$('#bSpendList').addEventListener('click',e=>{const b=e.target.closest('[data-bspdel]');if(!b)return;const [incomeId,spendId]=b.dataset.bspdel.split('|'),inc=budgetData.incomes.find(x=>x.id===incomeId);if(!inc)return;inc.spent=(inc.spent||[]).filter(z=>z.id!==spendId);bSave();renderBudget();});
+$('#bSpendForm').addEventListener('submit',e=>{e.preventDefault();const inc=budgetData.incomes.find(x=>x.id===$('#bSpendIncome').value),name=$('#bSpendName').value.trim(),amount=bNum($('#bSpendAmount').value);if(!inc||!name||amount<=0){alert('Bitte Einnahme, Verwendungszweck und einen Betrag größer 0 auswählen.');return;}const used=(inc.spent||[]).reduce((a,z)=>a+z.amount,0);if(used+amount>inc.amount+0.001){alert('Der verbuchte Betrag übersteigt den verfügbaren Rest dieser Einnahme ('+eur.format(Math.max(0,inc.amount-used))+').');return;}if(!Array.isArray(inc.spent))inc.spent=[];inc.spent.push({id:uid(),name:name.slice(0,60),category:$('#bSpendCategory').value,amount});bSave();C=compute();renderBudget();if(view==='overview')renderOverview(false);$('#bSpendName').value='';$('#bSpendAmount').value='';});
+$('#bSpendList').addEventListener('click',e=>{const b=e.target.closest('[data-bspdel]');if(!b)return;const [incomeId,spendId]=b.dataset.bspdel.split('|'),inc=budgetData.incomes.find(x=>x.id===incomeId);if(!inc)return;inc.spent=(inc.spent||[]).filter(z=>z.id!==spendId);bSave();C=compute();renderBudget();if(view==='overview')renderOverview(false);});
 
 ['bIncome','bSavings','bLeisure','bOther'].forEach((id,i)=>$('#'+id).addEventListener('change',e=>{budgetData[['income','savings','leisure','other'][i]]=bNum(e.target.value);bSave();renderBudget();}));
 $('#bForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#bName').value.trim(),amount=bNum($('#bAmount').value);if(!name||amount<=0){alert('Bitte Bezeichnung und einen Betrag größer 0 eingeben.');return;}budgetData.expenses.push({id:uid(),name:name.slice(0,60),category:$('#bCategory').value,amount:amount});bSave();renderBudget();$('#bName').value='';$('#bAmount').value='';});
@@ -1989,7 +1989,7 @@ document.addEventListener('click',e=>{
   }
 });
 // Donut-Hover (Delegation)
-$('#donut').addEventListener('mouseover',e=>{ const t=e.target.closest('[data-i]'); hlDonut(t?+t.dataset.i:-1); });
+$('#donut').addEventListener('mouseover',e=>{ const t=e.target.closest('[data-i]'); hlDonut(t?Number(t.dataset.i):-1); });
 $('#donut').addEventListener('mouseleave',()=>hlDonut(-1));
 
 let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ moveInd(); progress(); if(C) renderActive(false); },180); });
