@@ -613,6 +613,20 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
     </div>
 
     <div class="card">
+      <h2>Cash in Wertpapiere umbuchen</h2>
+      <p class="lead">Buche Geld aus deinem Cash-Bestand in eine bestehende Position um. Das ist keine neue Einzahlung und erhöht dein extern eingezahltes Kapital nicht.</p>
+      <form id="fTransfer"><div class="formline">
+        <div><label for="transferDate">Datum</label><input id="transferDate" type="date" required></div>
+        <div><label for="transferAsset">Zielposition</label><select id="transferAsset"></select></div>
+        <div><label for="transferAmount">Betrag (€)</label><input id="transferAmount" inputmode="decimal" required></div>
+        <div><label for="transferNote">Notiz (optional)</label><input id="transferNote" placeholder="z. B. ETF-Kauf"></div>
+        <button class="primary" type="submit">Umbuchung buchen</button>
+      </div></form>
+      <p class="info" id="transferCashInfo"></p>
+      <div class="tablewrap" style="margin-top:12px"><table><thead><tr><th>Datum</th><th>Zielposition</th><th>Notiz</th><th class="r">Betrag</th><th></th></tr></thead><tbody id="transferBody"></tbody></table></div>
+      <p class="hint">Die Umbuchung reduziert Cash sofort. Aktualisiere anschließend den Brokerwert unter „Depotwert aktualisieren“, damit der ETF-Kauf im erfassten Depotwert erscheint.</p>
+    </div>
+    <div class="card">
       <h2>Einzelbuchung &amp; Buchungsliste</h2>
       <form id="fSingle">
         <div class="formline">
@@ -800,7 +814,8 @@ function fresh(){
     calc:Object.assign({},DEF_CALC),
     assets:DEFAULT_ASSETS.map(a=>Object.assign({},a)),
     deposits:[],
-    snapshots:[]
+    snapshots:[],
+    transfers:[]
   };
 }
 function sanitize(o){
@@ -845,7 +860,8 @@ function sanitize(o){
       Object.keys(s.values).forEach(k=>{ if(ids.has(k)&&isFinite(Number(s.values[k]))) values[k]=Number(s.values[k]); });
       return {date:s.date,values:values};
     });
-  return {v:3,settings:st,calc:calc,assets:assets,deposits:deposits,snapshots:snapshots};
+  const transfers=(Array.isArray(o.transfers)?o.transfers:[]).filter(t=>t&&isDate(t.date)&&ids.has(t.assetId)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0).map(t=>({id:String(t.id||uid()),date:t.date,assetId:t.assetId,amount:Number(t.amount),note:String(t.note||'')}));
+  return {v:3,settings:st,calc:calc,assets:assets,deposits:deposits,snapshots:snapshots,transfers:transfers};
 }
 function load(){
   try{ const raw=localStorage.getItem(KEY); if(!raw) return null; return sanitize(JSON.parse(raw)); }
@@ -877,7 +893,7 @@ function compute(){
     deposits.forEach(d=>{ if(d.date<=last.date&&paidBySnap[d.assetId]!==undefined) paidBySnap[d.assetId]+=d.amount; });
     paidAtSnap=state.assets.reduce((s,a)=>s+paidBySnap[a.id],0);
   }
-  return {deposits:deposits,paidBy:paidBy,total:total,cash:budgetCashTotal(),snaps:snaps,last:last,value:value,valueBy:valueBy,paidBySnap:paidBySnap,paidAtSnap:paidAtSnap};
+  return {deposits:deposits,paidBy:paidBy,total:total,cash:budgetCashBalance(),snaps:snaps,last:last,value:value,valueBy:valueBy,paidBySnap:paidBySnap,paidAtSnap:paidAtSnap};
 }
 function targetSum(){ return state.assets.reduce((s,a)=>s+a.target,0); }
 function splitAmount(total){
@@ -1621,13 +1637,21 @@ function renderDeposits(c){
     '<td class="r">'+eur.format(d.amount)+'</td><td class="r"><button type="button" class="icon" data-act="delDep" data-id="'+d.id+'" title="Buchung löschen">✕</button></td></tr>'
   ).join('');
 }
+function renderTransfers(){
+  const sel=$('#transferAsset'),cur=sel.value;
+  sel.innerHTML=state.assets.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>').join('');
+  if(cur&&state.assets.some(a=>a.id===cur))sel.value=cur;
+  $('#transferCashInfo').textContent='Verfügbarer Cash-Bestand: '+eur.format(budgetCashBalance());
+  const rows=(state.transfers||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
+  $('#transferBody').innerHTML=rows.length?rows.map(t=>{const a=state.assets.find(x=>x.id===t.assetId);return '<tr><td>'+fmtDate(t.date)+'</td><td>'+esc(a?a.name:'Unbekannte Position')+'</td><td>'+esc(t.note||'–')+'</td><td class="r">'+eur.format(t.amount)+'</td><td class="r"><button type="button" class="icon" data-transferdel="'+esc(t.id)+'" title="Umbuchung löschen">✕</button></td></tr>';}).join(''):'<tr><td colspan="5" class="muted">Noch keine Umbuchungen erfasst.</td></tr>';
+}
 function renderData(){
   const s=state.settings;
   setVal($('#setMonthly'),fmtIn(s.monthly)); setVal($('#setLump'),fmtIn(s.lump)); setVal($('#setFx'),fmtIn(s.fxFee)); setVal($('#setStart'),s.startDate);
   const sum=targetSum(), info=$('#planInfo');
   if(Math.abs(sum-100)>0.01) info.innerHTML='<span class="warn">Die Soll-Verteilung ergibt '+pct(sum,1)+', nicht 100 %. Passe sie unten bei den Positionen an.</span>';
   else info.innerHTML='Deine Rate verteilt sich so: '+state.assets.map(a=>'<b>'+eur.format(s.monthly*a.target/100)+'</b> '+esc(a.name)).join(' · ');
-  renderSnap(C); renderAssets(C); renderDeposits(C);
+  renderSnap(C); renderAssets(C); renderDeposits(C); renderTransfers();
 }
 
 /* ================= Monatsbudget ================= */
@@ -1640,6 +1664,8 @@ function bNum(v){let x=String(v||'').trim().replace(/\s|€/g,'');if(x.includes(
 function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catch(e){}}
 function isCashAllocation(z){return /^(cash|sparen|saving|savings)$/i.test(String(z.category||'').trim())||/(^|[^a-z])(cash|sparen|savings)([^a-z]|$)/i.test(String(z.name||''));}
 function budgetCashTotal(){return budgetData.incomes.reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0);}
+function cashTransferred(){return (state.transfers||[]).reduce((sum,t)=>sum+(Number(t.amount)||0),0);}
+function budgetCashBalance(){return Math.max(0,budgetCashTotal()-cashTransferred());}
 function renderBudget(){
   const monthIncomes=budgetData.incomes.filter(x=>x.month===budgetMonth),extra=monthIncomes.reduce((a,x)=>a+x.amount,0);
   const extraSpent=monthIncomes.reduce((a,x)=>a+(x.spent||[]).reduce((v,z)=>v+z.amount,0),0);
@@ -1944,6 +1970,13 @@ $('#fSingle').addEventListener('submit',e=>{
   $('#singleAmount').value='';
   afterBook(before,e.submitter||null,'Gebucht: '+eur.format(amt));
 });
+$('#fTransfer').addEventListener('submit',e=>{
+  e.preventDefault();const amount=parseNum($('#transferAmount').value),date=$('#transferDate').value,assetId=$('#transferAsset').value,note=$('#transferNote').value.trim();
+  if(!(amount>0)||!isDate(date)||!assetId){alert('Bitte Datum, Zielposition und einen gültigen Betrag angeben.');return;}
+  const available=budgetCashBalance();if(amount>available+0.001){alert('Der Betrag übersteigt deinen verfügbaren Cash-Bestand von '+eur.format(available)+'.');return;}
+  state.transfers=state.transfers||[];state.transfers.push({id:uid(),date:date,assetId:assetId,amount:amount,note:note.slice(0,80)});
+  save();C=compute();renderActive(false);$('#transferAmount').value='';$('#transferNote').value='';toast('Cash in Wertpapier umgebucht');
+});
 $('#fSnap').addEventListener('submit',e=>{
   e.preventDefault();
   const date=$('#snapDate').value; if(!isDate(date)){ alert('Bitte ein Datum wählen.'); return; }
@@ -1977,6 +2010,8 @@ $('#btnCatchup').addEventListener('click',e=>{
   afterBook(before,e.currentTarget,miss.length+' Rate'+(miss.length===1?'':'n')+' nachgetragen');
 });
 document.addEventListener('click',e=>{
+  const transfer=e.target.closest('button[data-transferdel]');
+  if(transfer){const prev=JSON.stringify(state);state.transfers=(state.transfers||[]).filter(t=>t.id!==transfer.dataset.transferdel);save();C=compute();renderActive(false);toastUndo('Umbuchung gelöscht',prev);return;}
   const b=e.target.closest('button[data-act]'); if(!b) return;
   if(b.dataset.act==='delAsset'){
     if(state.assets.length<=1){ alert('Mindestens eine Position muss bleiben.'); return; }
@@ -1996,7 +2031,7 @@ let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout((
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(moveInd);
 
 /* ================= Start ================= */
-$('#bookDate').value=todayISO(); $('#singleDate').value=todayISO(); $('#snapDate').value=todayISO();
+$('#bookDate').value=todayISO(); $('#singleDate').value=todayISO(); $('#snapDate').value=todayISO(); $('#transferDate').value=todayISO();
 $('#bookAmount').value=fmtIn(state.settings.monthly);
 (function(){
   const h=(location.hash||'').replace('#','');
