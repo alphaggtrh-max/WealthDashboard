@@ -1287,7 +1287,7 @@ function renderDonut(c,animate){
   const visible=segs.filter(x=>x.p>0).length;
   let svg='<svg viewBox="0 0 200 200" class="donutsvg'+(go?' spin':'')+'" role="img" aria-label="Portfolio-Aufteilung aus Wertpapieren und Cash"><circle cx="100" cy="100" r="'+R+'" fill="none" style="stroke:var(--line)" stroke-width="'+SW+'"/>';
   let n=0;
-  segs.forEach(x=>{if(x.p<=0)return;const fin=Math.max(0,x.len-(visible>1?0.7:0));svg+='<circle class="seg" data-i="'+x.i+'" data-final="'+fin+'" cx="100" cy="100" r="'+R+'" fill="none" stroke="'+x.a.color+'" stroke-width="'+SW+'" stroke-dasharray="'+(go?0:fin)+' '+CIRC+'" stroke-dashoffset="'+(-x.off)+'" transform="rotate(-90 100 100)" style="transition-delay:'+(go?n*90:0)+'ms"/>';n++;});
+  segs.forEach(x=>{if(x.p<=0)return;const fin=x.len;svg+='<circle class="seg" data-i="'+x.i+'" data-final="'+fin+'" cx="100" cy="100" r="'+R+'" fill="none" stroke="'+x.a.color+'" stroke-width="'+SW+'" stroke-dasharray="'+(go?0:fin)+' '+CIRC+'" stroke-dashoffset="'+(-x.off)+'" transform="rotate(-90 100 100)" style="transition-delay:'+(go?n*90:0)+'ms"/>';n++;});
   svg+='<text class="dl" id="dcL" x="100" y="94" text-anchor="middle">Portfolio gesamt</text><text class="dv" id="dcV" x="100" y="117" text-anchor="middle">'+eur0.format(total)+'</text></svg>';
   const leg=segs.map(x=>'<li data-i="'+x.i+'"><i style="background:'+x.a.color+'"></i><span>'+esc(x.a.name)+'</span><b>'+pct(x.p*100)+'</b><em>'+eur.format(x.amount)+'</em></li>').join('');
   wrap.innerHTML='<div class="donutrow">'+svg+'<ul class="dlegend">'+leg+'</ul></div>'+(total>0?'':'<p class="hint">Noch keine Wertpapier-Einzahlungen oder Cash-Bestände erfasst. Buche unter „Daten“ oder „Budget“.</p>');
