@@ -17,7 +17,7 @@
   --grid:rgba(14,26,31,.05);
   --shadow:0 1px 0 rgba(14,26,31,.03),0 14px 34px -18px rgba(14,26,31,.28);
   --side:#0b171b; --side-line:#172a30; --side-text:#e6eeee; --side-muted:#86a0a3;
-  --c-val:#94640f; --c-paid:#6b7f86; --c-lo:#c93a2b; --c-hi:#0b8a60; --c-stp:#8dbfca; --c-stg:#26b98a; --c-stl:#0b8a60;
+  --c-val:#d946ef; --c-paid:#8b5cf6; --c-lo:#c93a2b; --c-hi:#0b8a60; --c-stp:#8dbfca; --c-stg:#26b98a; --c-stl:#0b8a60;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -26,7 +26,7 @@
     --accent:#e0b45a; --on-accent:#1b1405; --pos:#3fd9a0; --neg:#ff7366; --heat:#2a9d93; --warn:#f0a050;
     --grid:rgba(255,255,255,.028); --shadow:0 0 0 rgba(0,0,0,0);
     --side:#060e11; --side-line:#122025;
-    --c-val:#e0b45a; --c-paid:#7f98a0; --c-lo:#ff7a6b; --c-hi:#3fd9a0; --c-stp:#3b8493; --c-stg:#3fd9a0; --c-stl:#7af0c4;
+    --c-val:#ec4899; --c-paid:#a78bfa; --c-lo:#ff7a6b; --c-hi:#3fd9a0; --c-stp:#3b8493; --c-stg:#3fd9a0; --c-stl:#7af0c4;
   }
 }
 :root[data-theme="dark"]{
@@ -35,7 +35,7 @@
   --accent:#e0b45a; --on-accent:#1b1405; --pos:#3fd9a0; --neg:#ff7366; --heat:#2a9d93; --warn:#f0a050;
   --grid:rgba(255,255,255,.028); --shadow:0 0 0 rgba(0,0,0,0);
   --side:#060e11; --side-line:#122025;
-  --c-val:#e0b45a; --c-paid:#7f98a0; --c-lo:#ff7a6b; --c-hi:#3fd9a0; --c-stp:#3b8493; --c-stg:#3fd9a0; --c-stl:#7af0c4;
+  --c-val:#ec4899; --c-paid:#a78bfa; --c-lo:#ff7a6b; --c-hi:#3fd9a0; --c-stp:#3b8493; --c-stg:#3fd9a0; --c-stl:#7af0c4;
 }
 *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
 html,body{margin:0}
@@ -720,7 +720,7 @@ const $$=(s,el=document)=>Array.from(el.querySelectorAll(s));
 const KEY='portfolio-tracker-v1', THEME_KEY='portfolio-tracker-theme', EXP_KEY='portfolio-tracker-export', SNOOZE_KEY='portfolio-tracker-snooze';
 const TAX=0.26375;
 const REDUCED=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
-const COLORS=['#46c2b3','#7d97ff','#ff9d5c','#b57bff','#ff7a9c','#5ec4ee','#a3d65c','#e0b45a'];
+const COLORS=['#46c2b3','#7d97ff','#ff9d5c','#8b5cf6','#ec4899','#5ec4ee','#a3d65c','#e0b45a'];
 const MS=[1000,5000,10000,25000,50000,100000,250000,500000,1000000];
 const eur=new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'});
 const eur0=new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0});
@@ -804,7 +804,7 @@ const DEFAULT_ASSETS=[
   {id:'a1',name:'Core MSCI World',target:74,color:'#46c2b3'},
   {id:'a2',name:'Core MSCI EM IMI',target:14,color:'#7d97ff'},
   {id:'a3',name:'Alphabet',target:7,color:'#ff9d5c',fx:false},
-  {id:'a4',name:'Nu Holdings',target:5,color:'#b57bff',fx:true}
+  {id:'a4',name:'Nu Holdings',target:5,color:'#8b5cf6',fx:true}
 ];
 const DEF_CALC={start:2600,growth:0,years:10,rate:5,fee:0.2,infl:2,vol:15,goal:100000,real:false,fxOn:true,tf:30,allow:1000,crashPct:30,crashYear:3,seed:7};
 function fresh(){
@@ -1278,11 +1278,12 @@ function renderHero(c,animate){
     rAF2(()=>{ m.style.transition='stroke-dashoffset 1.6s cubic-bezier(.3,.7,.2,1)'; m.style.strokeDashoffset=0; el.classList.add('go'); });
   }
 }
+function assetChartColor(a){return /nu\s*holdings/i.test(String(a.name||''))?'#8b5cf6':a.color;}
 function renderDonut(c,animate){
   const wrap=$('#donut'), R=70, SW=24, CIRC=2*Math.PI*R, invested=c.total, cash=c.cash||0, total=invested+cash, go=animate&&!REDUCED;
   const segs=[]; let off=0;
-  state.assets.forEach((a,i)=>{ const amount=c.paidBy[a.id]||0,p=total>0?amount/total:0; segs.push({a:a,i:i,p:p,amount:amount,len:p*CIRC,off:off}); off+=p*CIRC; });
-  if(cash>0){const p=cash/total;segs.push({a:{name:'Cash',color:'#a78bfa'},i:state.assets.length,p:p,amount:cash,len:p*CIRC,off:off});off+=p*CIRC;}
+  state.assets.forEach((a,i)=>{ const amount=c.paidBy[a.id]||0,p=total>0?amount/total:0; segs.push({a:Object.assign({},a,{color:assetChartColor(a)}),i:i,p:p,amount:amount,len:p*CIRC,off:off}); off+=p*CIRC; });
+  if(cash>0){const p=cash/total;segs.push({a:{name:'Cash',color:'#ec4899'},i:state.assets.length,p:p,amount:cash,len:p*CIRC,off:off});off+=p*CIRC;}
   const visible=segs.filter(x=>x.p>0).length;
   let svg='<svg viewBox="0 0 200 200" class="donutsvg'+(go?' spin':'')+'" role="img" aria-label="Portfolio-Aufteilung aus Wertpapieren und Cash"><circle cx="100" cy="100" r="'+R+'" fill="none" style="stroke:var(--line)" stroke-width="'+SW+'"/>';
   let n=0;
@@ -1307,9 +1308,9 @@ function renderBars(c,animate){
   const max=Math.max(1,Math.max.apply(null,rows.map(r=>Math.max(r.ist,r.soll))))*1.08;
   wrap.innerHTML=rows.map(r=>{
     const d=r.ist-r.soll, w=r.ist/max*100;
-    return '<div class="brow"><div class="hd"><span><i class="dot" style="background:'+r.a.color+'"></i>'+esc(r.a.name)+'</span>'+
+    return '<div class="brow"><div class="hd"><span><i class="dot" style="background:'+assetChartColor(r.a)+'"></i>'+esc(r.a.name)+'</span>'+
       '<span class="muted">Ist <b style="color:var(--text)">'+pct(r.ist)+'</b> · Soll '+pct(r.soll,0)+(total>0?' · '+sgn(d)+pct(Math.abs(d)).replace(' %',' pp'):'')+'</span></div>'+
-      '<div class="track"><div class="fill" data-w="'+w+'" style="background:'+r.a.color+';width:'+(go?0:w)+'%"></div><div class="mark" style="left:calc('+(r.soll/max*100)+'% - 1px)" title="Soll"></div></div></div>';
+      '<div class="track"><div class="fill" data-w="'+w+'" style="background:'+assetChartColor(r.a)+';width:'+(go?0:w)+'%"></div><div class="mark" style="left:calc('+(r.soll/max*100)+'% - 1px)" title="Soll"></div></div></div>';
   }).join('')+'<p class="hint">Der Strich zeigt den Soll-Anteil, der Balken den tatsächlich eingezahlten Anteil.</p>';
   if(go) rAF2(()=>{ $$('.fill',wrap).forEach(f=>{ f.style.width=f.dataset.w+'%'; }); });
 }
