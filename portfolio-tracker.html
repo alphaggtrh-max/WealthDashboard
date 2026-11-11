@@ -151,7 +151,12 @@ output{font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
 /* Donut / Balken */
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle}
 .donutrow{display:flex;gap:26px;align-items:center;flex-wrap:wrap}
-.donutsvg{width:200px;height:200px;flex:none}\n.donutvisual{position:relative;border-radius:50%;overflow:hidden}\n.donutvisual::before{content:"";position:absolute;inset:12%;border-radius:50%;background:var(--card)}\n.donutcenter{position:absolute;inset:12%;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none}\n.donutcenter .dl{font-size:11px}\n.donutcenter .dv{font-size:18px}
+.donutsvg{width:200px;height:200px;flex:none}
+.donutvisual{position:relative;border-radius:50%;overflow:hidden}
+.donutvisual::before{content:"";position:absolute;inset:12%;border-radius:50%;background:var(--card)}
+.donutcenter{position:absolute;inset:12%;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none}
+.donutcenter .dl{font-size:11px}
+.donutcenter .dv{font-size:18px}
 .donutsvg.spin{animation:spinin 1.1s cubic-bezier(.2,.8,.2,1) both}
 @keyframes spinin{from{transform:rotate(-80deg) scale(.92);opacity:0}}
 .seg{transition:stroke-dasharray 1.1s cubic-bezier(.2,.8,.2,1),stroke-width .2s,opacity .2s;cursor:pointer}
@@ -1279,12 +1284,16 @@ function renderHero(c,animate){
   }
 }
 function assetChartColor(a){return /nu\s*holdings/i.test(String(a.name||''))?'#8b5cf6':a.color;}
+let donutTotal=0;
 function renderDonut(c,animate){
-  const wrap=$('#donut'), invested=c.total, cash=c.cash||0, total=invested+cash;
+  const wrap=$('#donut'), cash=c.cash||0;
   const segs=[];
-  state.assets.forEach((a,i)=>{const amount=c.paidBy[a.id]||0,p=total>0?amount/total:0;if(p>0)segs.push({a:Object.assign({},a,{color:assetChartColor(a)}),i:i,p:p,amount:amount});});
-  if(cash>0){const p=cash/total;segs.push({a:{name:'Cash',color:'#ec4899'},i:state.assets.length,p:p,amount:cash});}
-  let cursor=0;const stops=segs.map(x=>{const start=cursor;cursor+=x.p*100;return x.a.color+' '+start.toFixed(5)+'% '+cursor.toFixed(5)+'%';}).join(',');
+  state.assets.forEach((a,i)=>{const amount=c.paidBy[a.id]||0;if(amount>0)segs.push({a:Object.assign({},a,{color:assetChartColor(a)}),i:i,amount:amount});});
+  if(cash>0)segs.push({a:{name:'Cash',color:'#ec4899'},i:state.assets.length,amount:cash});
+  // Gesamt = Summe der gezeigten Segmente, damit sich die Anteile immer zu 100 % schließen (kein graues Restsegment)
+  const total=segs.reduce((t,x)=>t+x.amount,0); donutTotal=total;
+  segs.forEach(x=>{x.p=total>0?x.amount/total:0;});
+  let cursor=0;const stops=segs.map((x,k)=>{const start=cursor;cursor=k===segs.length-1?100:cursor+x.p*100;return x.a.color+' '+start.toFixed(5)+'% '+cursor.toFixed(5)+'%';}).join(',');
   const chart='<div class="donutsvg donutvisual" role="img" aria-label="Portfolio-Aufteilung aus Wertpapieren und Cash" style="background:conic-gradient(from -90deg,'+stops+')"><div class="donutcenter"><span class="dl" id="dcL">Portfolio gesamt</span><strong class="dv" id="dcV">'+eur0.format(total)+'</strong></div></div>';
   const leg=segs.map(x=>'<li data-i="'+x.i+'"><i style="background:'+x.a.color+'"></i><span>'+esc(x.a.name)+'</span><b>'+pct(x.p*100)+'</b><em>'+eur.format(x.amount)+'</em></li>').join('');
   wrap.innerHTML='<div class="donutrow">'+chart+'<ul class="dlegend">'+leg+'</ul></div>'+(total>0?'':'<p class="hint">Noch keine Wertpapier-Einzahlungen oder Cash-Bestände erfasst. Buche unter „Daten“ oder „Budget“.</p>');
@@ -1293,9 +1302,9 @@ function hlDonut(i){
   const wrap=$('#donut');if(!wrap||!C)return;
     $$('.dlegend li',wrap).forEach(x=>x.classList.toggle('hl',Number(x.dataset.i)===i));
   const l=$('#dcL',wrap),v=$('#dcV',wrap);if(!l||!v)return;
-  if(i<0){l.textContent='Portfolio gesamt';v.textContent=eur0.format(C.total+(C.cash||0));}
+  if(i<0){l.textContent='Portfolio gesamt';v.textContent=eur0.format(donutTotal);}
   else if(i===state.assets.length){l.textContent='Cash';v.textContent=eur.format(C.cash||0);}
-  else{const a=state.assets[i];l.textContent=a.name.length>16?a.name.slice(0,15)+'…':a.name;v.textContent=pct((C.total+(C.cash||0))>0?(C.paidBy[a.id]||0)/(C.total+(C.cash||0))*100:0);}
+  else{const a=state.assets[i];l.textContent=a.name.length>16?a.name.slice(0,15)+'…':a.name;v.textContent=pct(donutTotal>0?(C.paidBy[a.id]||0)/donutTotal*100:0);}
 }
 function renderBars(c,animate){
   const wrap=$('#bars'), total=c.total, go=animate&&!REDUCED;
