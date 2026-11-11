@@ -884,6 +884,8 @@ function compute(){
   const paidBy={}; state.assets.forEach(a=>{paidBy[a.id]=0;});
   let total=0;
   deposits.forEach(d=>{ if(paidBy[d.assetId]!==undefined){ paidBy[d.assetId]+=d.amount; total+=d.amount; } });
+  (state.transfers||[]).forEach(t=>{if(paidBy[t.assetId]!==undefined)paidBy[t.assetId]+=t.amount;});
+  total+=budgetCashTotal();
   const snaps=state.snapshots.slice().sort((a,b)=>a.date.localeCompare(b.date));
   const last=snaps.length?snaps[snaps.length-1]:null;
   let value=null, paidAtSnap=null; const valueBy={}, paidBySnap={};
@@ -891,6 +893,7 @@ function compute(){
     value=0;
     state.assets.forEach(a=>{ valueBy[a.id]=last.values[a.id]||0; value+=valueBy[a.id]; paidBySnap[a.id]=0; });
     deposits.forEach(d=>{ if(d.date<=last.date&&paidBySnap[d.assetId]!==undefined) paidBySnap[d.assetId]+=d.amount; });
+    (state.transfers||[]).forEach(t=>{if(t.date<=last.date&&paidBySnap[t.assetId]!==undefined)paidBySnap[t.assetId]+=t.amount;});
     paidAtSnap=state.assets.reduce((s,a)=>s+paidBySnap[a.id],0);
   }
   return {deposits:deposits,paidBy:paidBy,total:total,cash:budgetCashBalance(),snaps:snaps,last:last,value:value,valueBy:valueBy,paidBySnap:paidBySnap,paidAtSnap:paidAtSnap};
