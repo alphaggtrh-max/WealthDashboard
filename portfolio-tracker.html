@@ -1287,7 +1287,7 @@ function assetChartColor(a){return /nu\s*holdings/i.test(String(a.name||''))?'#8
 let donutTotal=0, donutSegs=[], donutHl=-2;
 function donutGradient(hl){
   let cursor=0;
-  return 'conic-gradient(from -90deg,'+donutSegs.map((x,k)=>{
+  return 'conic-gradient(from 0deg,'+donutSegs.map((x,k)=>{
     const start=cursor; cursor=k===donutSegs.length-1?100:cursor+x.p*100;
     const col=(hl<0||x.i===hl)?x.a.color:'color-mix(in srgb,'+x.a.color+' 22%,transparent)';
     return col+' '+start.toFixed(5)+'% '+cursor.toFixed(5)+'%';
