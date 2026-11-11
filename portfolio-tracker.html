@@ -679,6 +679,18 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
       <div style="margin-top:20px"><h3>Wofür wurde das Zusatzeinkommen verwendet?</h3><div id="bSpendChart" role="img" aria-label="Diagramm der Ausgaben aus zusätzlichen Einkünften"></div></div>
     </div>
     <div class="card">
+      <div class="cardhead"><h2>Vermögenswerte</h2><span class="badge" id="bAssetTotal">0,00 €</span></div>
+      <p class="lead">Erfasse hier vorhandene Bestände unabhängig von deinem monatlichen Einkommen – zum Beispiel Bankguthaben, Bargeld, Auto, Immobilie oder andere Wertgegenstände. Das sind Bestandswerte, keine Einnahmen. Positionen, die du bereits im Portfolio-Bereich führst, bitte nicht doppelt eintragen.</p>
+      <form id="bAssetForm"><div class="formline">
+        <div><label for="bAssetName">Bezeichnung</label><input id="bAssetName" placeholder="z. B. Tagesgeldkonto, Auto" required maxlength="60"></div>
+        <div><label for="bAssetCategory">Kategorie</label><select id="bAssetCategory"><option>Bankguthaben</option><option>Bargeld</option><option>Immobilien</option><option>Fahrzeuge</option><option>Wertgegenstände</option><option>Krypto</option><option>Sonstiges</option></select></div>
+        <div><label for="bAssetValue">Aktueller Wert (€)</label><input id="bAssetValue" inputmode="decimal" placeholder="z. B. 2.500" required></div>
+        <button class="primary" type="submit">Vermögenswert hinzufügen</button>
+      </div></form>
+      <div class="tablewrap" style="margin-top:14px"><table><thead><tr><th>Vermögenswert</th><th>Kategorie</th><th class="r">Aktueller Wert</th><th></th></tr></thead><tbody id="bAssetList"></tbody></table></div>
+      <p class="hint" id="bAssetHint">Die Werte kannst du jederzeit aktualisieren oder löschen.</p>
+    </div>
+    <div class="card">
       <div class="cardhead"><h2>Wiederkehrende Ausgaben</h2><span class="badge" id="bCount">0 Ausgaben</span></div>
       <form id="bForm"><div class="formline">
         <div><label for="bName">Bezeichnung</label><input id="bName" placeholder="z. B. Handyvertrag" required maxlength="60"></div>
@@ -1662,8 +1674,8 @@ function renderData(){
 const BKEY='wealth-budget-v1';
 const currentBudgetMonth=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');};
 let budgetMonth=currentBudgetMonth();
-let budgetData={income:0,savings:0,leisure:0,other:0,expenses:[],incomes:[]};
-try{const saved=JSON.parse(localStorage.getItem(BKEY)||'null');if(saved&&typeof saved==='object')budgetData=Object.assign(budgetData,saved);if(!Array.isArray(budgetData.expenses))budgetData.expenses=[];if(!Array.isArray(budgetData.incomes))budgetData.incomes=[];}catch(e){}
+let budgetData={income:0,savings:0,leisure:0,other:0,expenses:[],incomes:[],assets:[]};
+try{const saved=JSON.parse(localStorage.getItem(BKEY)||'null');if(saved&&typeof saved==='object')budgetData=Object.assign(budgetData,saved);if(!Array.isArray(budgetData.expenses))budgetData.expenses=[];if(!Array.isArray(budgetData.incomes))budgetData.incomes=[];if(!Array.isArray(budgetData.assets))budgetData.assets=[];}catch(e){}
 function bNum(v){let x=String(v||'').trim().replace(/\s|€/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');else if(/^\d{1,3}(\.\d{3})+$/.test(x))x=x.replace(/\./g,'');const n=Number(x);return Number.isFinite(n)&&n>=0?n:0;}
 function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catch(e){}}
 function isCashAllocation(z){return /^(cash|sparen|saving|savings)$/i.test(String(z.category||'').trim())||/(^|[^a-z])(cash|sparen|savings)([^a-z]|$)/i.test(String(z.name||''));}
@@ -1689,6 +1701,9 @@ function renderBudget(){
   if(cashSaved>0)cats['Cash / Sparen']=cashSaved;
   const catRows=Object.entries(cats).sort((a,b)=>b[1]-a[1]),spentAll=catRows.reduce((a,x)=>a+x[1],0),actualSpent=catRows.filter(x=>x[0]!=='Cash / Sparen').reduce((a,x)=>a+x[1],0),max=Math.max(1,...catRows.map(x=>x[1])),chartCols=['#8b5cf6','#a78bfa','#7c3aed','#c4b5fd','#6d28d9','#ddd6fe','#9333ea'];
   $('#bSpendChart').innerHTML=catRows.length?'<div style="display:grid;gap:12px">'+catRows.map(([name,val],i)=>'<div><div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:5px"><span>'+esc(name)+'</span><b>'+eur.format(val)+'</b></div><div style="height:10px;border-radius:99px;background:var(--line);overflow:hidden"><div style="height:100%;width:'+(val/max*100)+'%;background:'+chartCols[i%chartCols.length]+';border-radius:99px"></div></div></div>').join('')+'<p class="hint">Tatsächlich ausgegeben: '+eur.format(actualSpent)+(cashSaved>0?' · Davon als Cash/Sparen ins Portfolio: '+eur.format(cashSaved):'')+'</p></div>':'<p class="muted">Sobald du Ausgaben verbuchst, erscheint hier eine Aufteilung nach Kategorien.</p>';
+  const assetTotal=budgetData.assets.reduce((sum,x)=>sum+(Number(x.value)||0),0);
+  $('#bAssetTotal').textContent=eur.format(assetTotal);
+  $('#bAssetList').innerHTML=budgetData.assets.length?budgetData.assets.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.category)+'</td><td class="r"><input data-bassetvalue="'+esc(x.id)+'" aria-label="Wert von '+esc(x.name)+'" inputmode="decimal" value="'+fmtIn(x.value)+'" style="max-width:140px;text-align:right"></td><td class="r"><button type="button" class="icon" data-bassetdel="'+esc(x.id)+'" title="Vermögenswert löschen">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Vermögenswerte eingetragen.</td></tr>';
   $('#bCount').textContent=budgetData.expenses.length+' '+(budgetData.expenses.length===1?'Ausgabe':'Ausgaben');
   $('#bList').innerHTML=budgetData.expenses.length?budgetData.expenses.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.category)+'</td><td class="r">'+eur.format(x.amount)+'</td><td class="r"><button type="button" class="icon" data-bdel="'+esc(x.id)+'">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Ausgaben eingetragen.</td></tr>';
   $('#bTotalIncome').textContent=eur.format(income);$('#bTotalExpenses').textContent=eur.format(total);$('#bAvailable').textContent=eur.format(available);$('#bShowSavings').textContent=eur.format(budgetData.savings);$('#bShowLeisure').textContent=eur.format(budgetData.leisure);$('#bFree').textContent=eur.format(free);
@@ -1703,6 +1718,9 @@ $('#bSpendForm').addEventListener('submit',e=>{e.preventDefault();const inc=budg
 $('#bSpendList').addEventListener('click',e=>{const b=e.target.closest('[data-bspdel]');if(!b)return;const [incomeId,spendId]=b.dataset.bspdel.split('|'),inc=budgetData.incomes.find(x=>x.id===incomeId);if(!inc)return;const item=(inc.spent||[]).find(z=>z.id===spendId);if(item&&isCashAllocation(item)&&budgetCashTotal()-(Number(item.amount)||0)<cashTransferred()-0.001){alert('Diese Cash-Zuordnung kann nicht gelöscht werden, weil der Betrag bereits umgebucht wurde.');return;}inc.spent=(inc.spent||[]).filter(z=>z.id!==spendId);bSave();C=compute();renderBudget();if(view==='overview')renderOverview(false);});
 
 ['bIncome','bSavings','bLeisure','bOther'].forEach((id,i)=>$('#'+id).addEventListener('change',e=>{budgetData[['income','savings','leisure','other'][i]]=bNum(e.target.value);bSave();renderBudget();}));
+$('#bAssetForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#bAssetName').value.trim(),value=bNum($('#bAssetValue').value);if(!name||value<=0){alert('Bitte Bezeichnung und einen Wert größer 0 eingeben.');return;}budgetData.assets.push({id:uid(),name:name.slice(0,60),category:$('#bAssetCategory').value,value:value});bSave();renderBudget();$('#bAssetName').value='';$('#bAssetValue').value='';});
+$('#bAssetList').addEventListener('change',e=>{const input=e.target.closest('[data-bassetvalue]');if(!input)return;const item=budgetData.assets.find(x=>x.id===input.dataset.bassetvalue);if(!item)return;const value=bNum(input.value);if(value<=0){alert('Der Wert muss größer als 0 sein.');input.value=fmtIn(item.value);return;}item.value=value;bSave();renderBudget();});
+$('#bAssetList').addEventListener('click',e=>{const b=e.target.closest('[data-bassetdel]');if(!b)return;budgetData.assets=budgetData.assets.filter(x=>x.id!==b.dataset.bassetdel);bSave();renderBudget();});
 $('#bForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#bName').value.trim(),amount=bNum($('#bAmount').value);if(!name||amount<=0){alert('Bitte Bezeichnung und einen Betrag größer 0 eingeben.');return;}budgetData.expenses.push({id:uid(),name:name.slice(0,60),category:$('#bCategory').value,amount:amount});bSave();renderBudget();$('#bName').value='';$('#bAmount').value='';});
 $('#bList').addEventListener('click',e=>{const b=e.target.closest('[data-bdel]');if(!b)return;budgetData.expenses=budgetData.expenses.filter(x=>x.id!==b.dataset.bdel);bSave();renderBudget();});
 
@@ -1844,7 +1862,7 @@ function doExport(){
 function doImport(file){
   const fr=new FileReader();
   fr.onload=()=>{
-    try{ const prev=JSON.stringify(state), imported=JSON.parse(fr.result); state=sanitize(imported); if(imported.budget&&typeof imported.budget==='object'){ budgetData=Object.assign({income:0,savings:0,leisure:0,other:0,expenses:[]},imported.budget); if(!Array.isArray(budgetData.expenses)) budgetData.expenses=[]; if(!Array.isArray(budgetData.incomes)) budgetData.incomes=[]; } bSave(); save(); C=compute(); renderActive(true); toastUndo('Import erfolgreich',prev); }
+    try{ const prev=JSON.stringify(state), imported=JSON.parse(fr.result); state=sanitize(imported); if(imported.budget&&typeof imported.budget==='object'){ budgetData=Object.assign({income:0,savings:0,leisure:0,other:0,expenses:[],incomes:[],assets:[]},imported.budget); if(!Array.isArray(budgetData.expenses)) budgetData.expenses=[]; if(!Array.isArray(budgetData.incomes)) budgetData.incomes=[]; if(!Array.isArray(budgetData.assets)) budgetData.assets=[]; } bSave(); save(); C=compute(); renderActive(true); toastUndo('Import erfolgreich',prev); }
     catch(e){ alert('Import fehlgeschlagen: '+e.message); }
   };
   fr.readAsText(file);
