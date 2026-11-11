@@ -1293,14 +1293,17 @@ function donutGradient(hl){
     return col+' '+start.toFixed(5)+'% '+cursor.toFixed(5)+'%';
   }).join(',')+')';
 }
-function donutIndexAt(ev){
-  const el=$('.donutvisual'); if(!el||!donutSegs.length) return -1;
-  const r=el.getBoundingClientRect(), dx=ev.clientX-(r.left+r.width/2), dy=ev.clientY-(r.top+r.height/2);
-  const R=r.width/2, d=Math.hypot(dx,dy);
-  if(d>R||d<R*0.68) return -1;                       // nur auf dem Ring
-  let a=Math.atan2(dy,dx)*180/Math.PI+90; if(a<0) a+=360; // 0° = oben, im Uhrzeigersinn
-  const f=a/360*100; let cur=0;
-  for(const x of donutSegs){ cur+=x.p*100; if(f<=cur+1e-9) return x.i; }
+function donutIndexAt(ev,el){
+  el=el||$('.donutvisual'); if(!el||!donutSegs.length) return -1;
+  const r=el.getBoundingClientRect(), rx=r.width/2, ry=r.height/2;
+  if(!rx||!ry)return -1;
+  const dx=(ev.clientX-(r.left+rx))/rx, dy=(ev.clientY-(r.top+ry))/ry;
+  const d=Math.hypot(dx,dy);
+  // Sichtbarer Ring: äußere 24 % des Kreises; die Mitte bleibt neutral.
+  if(d>1||d<0.76)return -1;
+  let a=Math.atan2(dy,dx)*180/Math.PI+90; if(a<0)a+=360;
+  const f=a/360; let cur=0;
+  for(const x of donutSegs){cur+=x.p;if(f<=cur+1e-9)return x.i;}
   return donutSegs[donutSegs.length-1].i;
 }
 function renderDonut(c,animate){
@@ -2050,13 +2053,25 @@ document.addEventListener('click',e=>{
     state.deposits=state.deposits.filter(d=>d.id!==b.dataset.id); save(); C=compute(); renderActive(false); toastUndo('Buchung gelöscht',prev);
   }
 });
-// Donut-Hover (Delegation)
-$('#donut').addEventListener('mouseover',e=>{ if(e.target.closest('.donutvisual')) return; const t=e.target.closest('[data-i]'); hlDonut(t?Number(t.dataset.i):-1); });
-['mousemove','click'].forEach(ev=>$('#donut').addEventListener(ev,e=>{
-  const v=e.target.closest('.donutvisual'); if(!v) return;
-  const i=donutIndexAt(e); v.style.cursor=i>=0?'pointer':'default'; hlDonut(i);
-}));
-$('#donut').addEventListener('mouseleave',()=>hlDonut(-1));
+// Donut-Hover: Ring und Legende reagieren unabhängig voneinander
+$('#donut').addEventListener('pointermove',e=>{
+  const v=e.target.closest('.donutvisual');
+  if(!v)return;
+  const i=donutIndexAt(e,v);
+  v.style.cursor=i>=0?'pointer':'default';
+  hlDonut(i);
+});
+$('#donut').addEventListener('click',e=>{
+  const v=e.target.closest('.donutvisual');
+  if(!v)return;
+  const i=donutIndexAt(e,v);
+  if(i>=0)hlDonut(i);
+});
+$('#donut').addEventListener('pointerover',e=>{
+  const item=e.target.closest('.dlegend li[data-i]');
+  if(item)hlDonut(Number(item.dataset.i));
+});
+$('#donut').addEventListener('pointerleave',()=>hlDonut(-1));
 
 let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ moveInd(); progress(); if(C) renderActive(false); },180); });
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(moveInd);
