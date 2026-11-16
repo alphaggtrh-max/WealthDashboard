@@ -1288,40 +1288,35 @@ function renderHero(c,animate){
   }
 }
 function assetChartColor(a){return /nu\s*holdings/i.test(String(a.name||''))?'#8b5cf6':a.color;}
+function allocationGroups(c,total){
+ const groups=state.plans.map(p=>{const aa=state.assets.filter(a=>a.planId===p.id);return {id:p.id,name:p.name,assets:aa,color:aa[0]?.color||'#46c2b3',amount:aa.reduce((v,a)=>v+(c.paidBy[a.id]||0),0),soll:aa.reduce((v,a)=>v+(Number(a.target)||0),0)};});
+ const loose=state.assets.filter(a=>!a.planId);if(loose.length)groups.push({id:'__loose',name:'Ohne Sparplan',assets:loose,color:loose[0]?.color||'#8b97a0',amount:loose.reduce((v,a)=>v+(c.paidBy[a.id]||0),0),soll:loose.reduce((v,a)=>v+(Number(a.target)||0),0)});
+ return groups.map(g=>Object.assign(g,{ist:total>0?g.amount/total*100:0}));
+}
 function renderDonut(c,animate){
-  const wrap=$('#donut'), R=70, SW=24, CIRC=2*Math.PI*R, invested=c.total, cash=c.cash||0, total=invested+cash, go=animate&&!REDUCED;
-  const segs=[]; let off=0;
-  state.assets.forEach((a,i)=>{ const amount=c.paidBy[a.id]||0,p=total>0?amount/total:0; segs.push({a:Object.assign({},a,{color:assetChartColor(a)}),i:i,p:p,amount:amount,len:p*CIRC,off:off}); off+=p*CIRC; });
-  if(cash>0){const p=cash/total;segs.push({a:{name:'Cash',color:'#ec4899'},i:state.assets.length,p:p,amount:cash,len:p*CIRC,off:off});off+=p*CIRC;}
-  const visible=segs.filter(x=>x.p>0).length;
-  let svg='<svg viewBox="0 0 200 200" class="donutsvg'+(go?' spin':'')+'" role="img" aria-label="Portfolio-Aufteilung aus Wertpapieren und Cash">';
-  let n=0;
-  segs.forEach(x=>{if(x.p<=0)return;const fin=Math.max(0,x.len-(visible>1?2:0));svg+='<circle class="seg" data-i="'+x.i+'" data-final="'+fin+'" cx="100" cy="100" r="'+R+'" fill="none" stroke="'+x.a.color+'" stroke-width="'+SW+'" stroke-dasharray="'+(go?0:fin)+' '+CIRC+'" stroke-dashoffset="'+(-x.off)+'" transform="rotate(-90 100 100)" style="transition-delay:'+(go?n*90:0)+'ms"/>';n++;});
-  svg+='<text class="dl" id="dcL" x="100" y="94" text-anchor="middle">Portfolio gesamt</text><text class="dv" id="dcV" x="100" y="117" text-anchor="middle">'+eur0.format(total)+'</text></svg>';
-  const leg=segs.map(x=>'<li data-i="'+x.i+'"><i style="background:'+x.a.color+'"></i><span>'+esc(x.a.name)+'</span><b>'+pct(x.p*100)+'</b><em>'+eur.format(x.amount)+'</em></li>').join('');
-  wrap.innerHTML='<div class="donutrow">'+svg+'<ul class="dlegend">'+leg+'</ul></div>'+(total>0?'':'<p class="hint">Noch keine Wertpapier-Einzahlungen oder Cash-Bestände erfasst. Buche unter „Daten“ oder „Budget“.</p>');
-  if(go){rAF2(()=>{$$('.seg',wrap).forEach(x=>{x.style.strokeDasharray=x.dataset.final+' '+CIRC;});});setTimeout(()=>{$$('.seg',wrap).forEach(x=>{x.style.transitionDelay='0ms';});},1600);}
+ const wrap=$('#donut'),R=70,SW=24,CIRC=2*Math.PI*R,cash=c.cash||0,total=c.total+cash,go=animate&&!REDUCED;
+ const groups=allocationGroups(c,total),segs=groups.map((g,i)=>({a:{name:g.name,color:g.color},i,p:total>0?g.amount/total:0,amount:g.amount}));if(cash>0)segs.push({a:{name:'Cash',color:'#ec4899'},i:groups.length,p:cash/total,amount:cash});
+ let off=0,n=0,svg='<svg viewBox="0 0 200 200" class="donutsvg'+(go?' spin':'')+'" role="img" aria-label="Portfolio-Aufteilung nach Sparplan-Töpfen">';
+ segs.forEach(x=>{x.len=x.p*CIRC;x.off=off;off+=x.len;if(x.p<=0)return;const fin=Math.max(0,x.len-(segs.filter(z=>z.p>0).length>1?2:0));svg+='<circle class="seg" data-i="'+x.i+'" data-final="'+fin+'" cx="100" cy="100" r="'+R+'" fill="none" stroke="'+x.a.color+'" stroke-width="'+SW+'" stroke-dasharray="'+(go?0:fin)+' '+CIRC+'" stroke-dashoffset="'+(-x.off)+'" transform="rotate(-90 100 100)" style="transition-delay:'+(go?n++*90:0)+'ms"/>';});
+ svg+='<text class="dl" id="dcL" x="100" y="94" text-anchor="middle">Portfolio gesamt</text><text class="dv" id="dcV" x="100" y="117" text-anchor="middle">'+eur0.format(total)+'</text></svg>';
+ const leg=segs.map(x=>'<li data-i="'+x.i+'"><i style="background:'+x.a.color+'"></i><span>'+esc(x.a.name)+'</span><b>'+pct(x.p*100)+'</b><em>'+eur.format(x.amount)+'</em></li>').join('');
+ const details=groups.map(g=>'<div class="muted small" style="display:flex;justify-content:space-between;gap:8px"><span>'+esc(g.name)+': '+g.assets.map(a=>esc(a.name)).join(', ')+'</span><b>'+pct(g.ist)+'</b></div>').join('');
+ wrap.innerHTML='<div class="donutrow">'+svg+'<ul class="dlegend">'+leg+'</ul></div><details class="tax"><summary>Mehr Details – einzelne Positionen</summary><div style="display:grid;gap:7px;margin-top:10px">'+details+'</div></details>'+(total>0?'':'<p class="hint">Noch keine Wertpapier-Einzahlungen oder Cash-Bestände erfasst. Buche unter „Daten“ oder „Budget“.</p>');
+ if(go){rAF2(()=>{$$('.seg',wrap).forEach(x=>{x.style.strokeDasharray=x.dataset.final+' '+CIRC;});});setTimeout(()=>{$$('.seg',wrap).forEach(x=>{x.style.transitionDelay='0ms';});},1600);}
 }
 function hlDonut(i){
-  const wrap=$('#donut');if(!wrap||!C)return;
-  $$('.seg',wrap).forEach(x=>{const on=i<0||Number(x.dataset.i)===i;x.style.opacity=on?1:.25;x.setAttribute('stroke-width',Number(x.dataset.i)===i?30:24);});
-  $$('.dlegend li',wrap).forEach(x=>x.classList.toggle('hl',Number(x.dataset.i)===i));
-  const l=$('#dcL',wrap),v=$('#dcV',wrap);if(!l||!v)return;
-  if(i<0){l.textContent='Portfolio gesamt';v.textContent=eur0.format(C.total+(C.cash||0));}
-  else if(i===state.assets.length){l.textContent='Cash';v.textContent=eur.format(C.cash||0);}
-  else{const a=state.assets[i];l.textContent=a.name.length>16?a.name.slice(0,15)+'…':a.name;v.textContent=pct((C.total+(C.cash||0))>0?(C.paidBy[a.id]||0)/(C.total+(C.cash||0))*100:0);}
+ const wrap=$('#donut');if(!wrap||!C)return;
+ $$('.seg',wrap).forEach(x=>{const on=i<0||Number(x.dataset.i)===i;x.style.opacity=on?1:.25;x.setAttribute('stroke-width',Number(x.dataset.i)===i?30:24);});
+ $$('.dlegend li',wrap).forEach(x=>x.classList.toggle('hl',Number(x.dataset.i)===i));
+ const l=$('#dcL',wrap),v=$('#dcV',wrap);if(!l||!v)return;const groups=allocationGroups(C,C.total+(C.cash||0));
+ if(i<0){l.textContent='Portfolio gesamt';v.textContent=eur0.format(C.total+(C.cash||0));}
+ else if(i===groups.length){l.textContent='Cash';v.textContent=eur.format(C.cash||0);}
+ else if(groups[i]){l.textContent=groups[i].name.length>16?groups[i].name.slice(0,15)+'…':groups[i].name;v.textContent=pct(groups[i].ist);}
 }
 function renderBars(c,animate){
-  const wrap=$('#bars'), total=c.total, go=animate&&!REDUCED;
-  const rows=state.assets.map(a=>({a:a,ist:total>0?(c.paidBy[a.id]||0)/total*100:0,soll:a.target}));
-  const max=Math.max(1,Math.max.apply(null,rows.map(r=>Math.max(r.ist,r.soll))))*1.08;
-  wrap.innerHTML=rows.map(r=>{
-    const d=r.ist-r.soll, w=r.ist/max*100;
-    return '<div class="brow"><div class="hd"><span><i class="dot" style="background:'+assetChartColor(r.a)+'"></i>'+esc(r.a.name)+'</span>'+
-      '<span class="muted">Ist <b style="color:var(--text)">'+pct(r.ist)+'</b> · Soll '+pct(r.soll,0)+(total>0?' · '+sgn(d)+pct(Math.abs(d)).replace(' %',' pp'):'')+'</span></div>'+
-      '<div class="track"><div class="fill" data-w="'+w+'" style="background:'+assetChartColor(r.a)+';width:'+(go?0:w)+'%"></div><div class="mark" style="left:calc('+(r.soll/max*100)+'% - 1px)" title="Soll"></div></div></div>';
-  }).join('')+'<p class="hint">Der Strich zeigt den Soll-Anteil, der Balken den tatsächlich eingezahlten Anteil.</p>';
-  if(go) rAF2(()=>{ $$('.fill',wrap).forEach(f=>{ f.style.width=f.dataset.w+'%'; }); });
+ const wrap=$('#bars'),total=c.total,go=animate&&!REDUCED,rows=allocationGroups(c,total),max=Math.max(1,...rows.map(r=>Math.max(r.ist,r.soll)))*1.08;
+ wrap.innerHTML=rows.map(r=>{const d=r.ist-r.soll,w=r.ist/max*100;return '<div class="brow"><div class="hd"><span><i class="dot" style="background:'+r.color+'"></i>'+esc(r.name)+'</span><span class="muted">Ist <b style="color:var(--text)">'+pct(r.ist)+'</b> · Soll '+pct(r.soll,0)+(total>0?' · '+sgn(d)+pct(Math.abs(d)).replace(' %',' pp'):'')+'</span></div><div class="track"><div class="fill" data-w="'+w+'" style="background:'+r.color+';width:'+(go?0:w)+'%"></div><div class="mark" style="left:calc('+(r.soll/max*100)+'% - 1px)" title="Soll"></div></div></div>';}).join('')+'<details class="tax"><summary>Mehr Details – einzelne Positionen</summary><div style="display:grid;gap:10px;margin-top:10px">'+rows.map(g=>'<div><b>'+esc(g.name)+'</b>'+g.assets.map(a=>'<div class="muted small" style="display:flex;justify-content:space-between"><span>'+esc(a.name)+'</span><span>Ist '+pct(total>0?(c.paidBy[a.id]||0)/total*100:0)+' · Soll '+pct(a.target,1)+'</span></div>').join('')+'</div>').join('')+'</div></details><p class="hint">Die Allokation zeigt die Verteilung auf deine Sparplan-Töpfe. Der Strich zeigt den Soll-Anteil, der Balken den tatsächlich eingezahlten Anteil.</p>';
+ if(go)rAF2(()=>{$$('.fill',wrap).forEach(f=>{f.style.width=f.dataset.w+'%';});});
 }
 function renderHistory(animate){
   const el=$('#hChart'), legend=$('#hLegend'), c=C;
@@ -1658,14 +1653,14 @@ function renderTransfers(){
   const rows=(state.transfers||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
   $('#transferBody').innerHTML=rows.length?rows.map(t=>{const a=state.assets.find(x=>x.id===t.assetId);return '<tr><td>'+fmtDate(t.date)+'</td><td>'+esc(a?a.name:'Unbekannte Position')+'</td><td>'+esc(t.note||'–')+'</td><td class="r">'+eur.format(t.amount)+'</td><td class="r"><button type="button" class="icon" data-transferdel="'+esc(t.id)+'" title="Umbuchung löschen">✕</button></td></tr>';}).join(''):'<tr><td colspan="5" class="muted">Noch keine Umbuchungen erfasst.</td></tr>';
 }
-function renderPlans(){const host=$('#plansEditor');host.innerHTML=state.plans.map(p=>{const aa=state.assets.filter(a=>a.planId===p.id),sum=aa.reduce((v,a)=>v+(Number(a.planTarget)||0),0),available=state.assets.filter(a=>a.planId!==p.id);return '<div class="card" style="margin:10px 0;padding:14px"><div class="row" style="align-items:end"><div><label>Topfname</label><input data-plan-name="'+esc(p.id)+'" value="'+esc(p.name)+'"></div><div><label>Monatliche Sparrate (€)</label><input data-plan-monthly="'+esc(p.id)+'" inputmode="decimal" value="'+fmtIn(p.monthly)+'"></div><div style="flex:0 0 auto"><button type="button" class="icon" data-plan-del="'+esc(p.id)+'" '+(state.plans.length===1?'disabled':'')+'>✕</button></div></div><div class="tablewrap"><table><thead><tr><th>Position</th><th>Allokation im Topf</th><th class="r">Monatlicher Betrag</th><th></th></tr></thead><tbody>'+(aa.length?aa.map(a=>'<tr><td>'+esc(a.name)+'</td><td><input class="inl num" data-plan-weight="'+esc(p.id)+'" data-asset="'+esc(a.id)+'" inputmode="decimal" value="'+fmtIn(a.planTarget)+'"> %</td><td class="r">'+eur.format((Number(p.monthly)||0)*(Number(a.planTarget)||0)/100)+'</td><td class="r"><button type="button" class="icon" data-plan-remove="'+esc(p.id)+'" data-asset="'+esc(a.id)+'" title="Position aus diesem Topf entfernen">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Positionen zugeordnet.</td></tr>')+'</tbody></table></div><div class="row" style="align-items:end;margin-top:10px"><div style="flex:1"><label>Position zu diesem Topf hinzufügen oder hierher verschieben</label><select data-plan-add-select="'+esc(p.id)+'"><option value="">Position auswählen …</option>'+available.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+(a.planId?' (aus anderem Topf)':' (nicht zugeordnet)')+'</option>').join('')+'</select></div><button type="button" data-plan-add="'+esc(p.id)+'" '+(!available.length?'disabled':'')+'>Position hinzufügen</button></div><p class="hint">'+aa.length+' Positionen · Allokation: <b class="'+(Math.abs(sum-100)>0.01?'warn':'')+'">'+pct(sum,1)+'</b> (muss 100 % ergeben)</p></div>';}).join('');const invalid=state.plans.filter(p=>p.monthly>0&&Math.abs(state.assets.filter(a=>a.planId===p.id).reduce((v,a)=>v+(Number(a.planTarget)||0),0)-100)>0.01);$('#plansInfo').innerHTML=invalid.length?'<span class="warn">Bitte die Allokation in '+invalid.map(p=>esc(p.name)).join(', ')+' auf 100 % setzen.</span>':'Alle aktiven Sparplan-Töpfe sind korrekt verteilt.';}
+function renderPlans(){const host=$('#plansEditor');host.innerHTML=state.plans.map(p=>{const aa=state.assets.filter(a=>a.planId===p.id),sum=aa.reduce((v,a)=>v+(Number(a.planTarget)||0),0),available=state.assets.filter(a=>a.planId!==p.id);return '<div class="card" style="margin:10px 0;padding:14px"><div class="row" style="align-items:end"><div><label>Topfname</label><input data-plan-name="'+esc(p.id)+'" value="'+esc(p.name)+'"></div><div><label>Monatliche Sparrate (€)</label><input data-plan-monthly="'+esc(p.id)+'" inputmode="decimal" value="'+fmtIn(p.monthly)+'"></div><div style="flex:0 0 auto"><button type="button" class="icon" data-plan-del="'+esc(p.id)+'" '+(state.plans.length===1?'disabled':'')+'>✕</button></div></div><details class="tax"><summary>Mehr Details – Positionen und Allokation im Topf</summary><div class="tablewrap"><table><thead><tr><th>Position</th><th>Allokation im Topf</th><th class="r">Monatlicher Betrag</th><th></th></tr></thead><tbody>'+(aa.length?aa.map(a=>'<tr><td>'+esc(a.name)+'</td><td><input class="inl num" data-plan-weight="'+esc(p.id)+'" data-asset="'+esc(a.id)+'" inputmode="decimal" value="'+fmtIn(a.planTarget)+'"> %</td><td class="r">'+eur.format((Number(p.monthly)||0)*(Number(a.planTarget)||0)/100)+'</td><td class="r"><button type="button" class="icon" data-plan-remove="'+esc(p.id)+'" data-asset="'+esc(a.id)+'" title="Position aus diesem Topf entfernen">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Positionen zugeordnet.</td></tr>')+'</tbody></table></div><div class="row" style="align-items:end;margin-top:10px"><div style="flex:1"><label>Position zu diesem Topf hinzufügen oder hierher verschieben</label><select data-plan-add-select="'+esc(p.id)+'"><option value="">Position auswählen …</option>'+available.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+(a.planId?' (aus anderem Topf)':' (nicht zugeordnet)')+'</option>').join('')+'</select></div><button type="button" data-plan-add="'+esc(p.id)+'" '+(!available.length?'disabled':'')+'>Position hinzufügen</button></div><p class="hint">'+aa.length+' Positionen · Allokation: <b class="'+(Math.abs(sum-100)>0.01?'warn':'')+'">'+pct(sum,1)+'</b> (muss 100 % ergeben)</p></div></details></div>';}).join('');const invalid=state.plans.filter(p=>p.monthly>0&&Math.abs(state.assets.filter(a=>a.planId===p.id).reduce((v,a)=>v+(Number(a.planTarget)||0),0)-100)>0.01);$('#plansInfo').innerHTML=invalid.length?'<span class="warn">Bitte die Allokation in '+invalid.map(p=>esc(p.name)).join(', ')+' auf 100 % setzen.</span>':'Alle aktiven Sparplan-Töpfe sind korrekt verteilt.';}
 function renderData(){
   syncPlanTargets();
   const s=state.settings;
   setVal($('#setMonthly'),fmtIn(s.monthly)); setVal($('#setLump'),fmtIn(s.lump)); setVal($('#setFx'),fmtIn(s.fxFee)); setVal($('#setStart'),s.startDate);
   const sum=targetSum(), info=$('#planInfo');
   if(Math.abs(sum-100)>0.01) info.innerHTML='<span class="warn">Die Soll-Verteilung ergibt '+pct(sum,1)+', nicht 100 %. Passe sie unten bei den Positionen an.</span>';
-  else info.innerHTML='Deine Rate verteilt sich so: '+state.assets.map(a=>'<b>'+eur.format(s.monthly*a.target/100)+'</b> '+esc(a.name)).join(' · ');
+  else info.innerHTML='Deine Monatsrate verteilt sich auf die Spartöpfe: '+state.plans.map(p=>'<b>'+eur.format(Number(p.monthly)||0)+'</b> '+esc(p.name)).join(' · ')+(state.assets.some(a=>!a.planId)?' · Nicht zugeordnet: '+eur.format(state.assets.filter(a=>!a.planId).reduce((v,a)=>v+s.monthly*(Number(a.target)||0)/100,0)):'');
   renderPlans();renderSnap(C); renderAssets(C); renderDeposits(C); renderTransfers();
 }
 
@@ -2136,7 +2131,7 @@ function bindNum(sel,obj,key,min,max){
     const v=parseNum(e.target.value);
     if(!isFinite(v)||v<min||v>max) return;
     state[obj][key]=v; save();
-    if(view==='data'){ const s=state.settings, sum=targetSum(); if(Math.abs(sum-100)<=0.01) $('#planInfo').innerHTML='Deine Rate verteilt sich so: '+state.assets.map(a=>'<b>'+eur.format(s.monthly*a.target/100)+'</b> '+esc(a.name)).join(' · '); }
+    if(view==='data'){ const s=state.settings, sum=targetSum(); if(Math.abs(sum-100)<=0.01) $('#planInfo').innerHTML='Deine Monatsrate verteilt sich auf die Spartöpfe: '+state.plans.map(p=>'<b>'+eur.format(Number(p.monthly)||0)+'</b> '+esc(p.name)).join(' · '); }
   });
 }
 $('#setMonthly').addEventListener('change',e=>{const v=parseNum(e.target.value);if(!isFinite(v)||v<0||v>1e7)return;const old=state.plans.reduce((s,p)=>s+p.monthly,0);state.plans.forEach(p=>p.monthly=old>0?v*p.monthly/old:v/state.plans.length);syncPlanTargets();save();C=compute();renderActive(false);});
