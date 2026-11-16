@@ -606,13 +606,13 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
         <h2>Positionen &amp; Soll-Verteilung</h2>
         <span style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><label class="small" style="display:flex;gap:6px;align-items:center;margin:0">FX-Gebühr (%) <input id="setFx" inputmode="decimal" style="width:64px;padding:5px 8px"></label><span class="badge" id="sumBadge"></span></span>
       </div>
-      <div class="tablewrap">
+      <details class="tax"><summary>Mehr Details – einzelne Positionen bearbeiten</summary><div class="tablewrap">
         <table>
           <thead><tr><th>Position</th><th>Sparplan / Anteil</th><th title="Position wird nicht in EUR gehandelt (z. B. USD): XTB berechnet die Umrechnungsgebühr">FX-Gebühr</th><th class="r">Eingezahlt</th><th class="r">Wert</th><th class="r">Rendite</th><th></th></tr></thead>
           <tbody id="assetsBody"></tbody>
         </table>
       </div>
-      <div style="margin-top:12px"><button type="button" id="btnAddAsset">+ Position hinzufügen</button></div>
+      <div style="margin-top:12px"><button type="button" id="btnAddAsset">+ Position hinzufügen</button></div></details>
     </div>
 
     <div class="card">
