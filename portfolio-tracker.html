@@ -1925,27 +1925,14 @@ function doTrading212Import(file){
           };
         }).filter(h=>h.name&&h.units>0&&(h.invested>0||h.value>0));
         if(!holdings.length)throw new Error('Portfolio-CSV erkannt, aber keine gültigen Positionen mit Name, Invested value, Value und Owned quantity gefunden.');
-        const existingCount=state.assets.length;
         const existingValues={};
         const previousSnapshot=state.snapshots.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-1)[0];
         state.assets.forEach(a=>{existingValues[a.id]=previousSnapshot&&Number.isFinite(Number(previousSnapshot.values[a.id]))?Number(previousSnapshot.values[a.id]):0;});
-        const byName=new Map(state.assets.map((a,i)=>[String(a.name||'').trim().toLowerCase(),a]));
-        const mergedValues=Object.assign({},existingValues);
-        let added=0,updated=0;
-        holdings.forEach(h=>{
-          const key=h.name.trim().toLowerCase();
-          let asset=byName.get(key);
-          if(!asset){
-            asset={id:'t212_'+uid(),name:h.name,target:0,color:colors[state.assets.length%colors.length],fx:false,units:h.units,lastPrice:h.units>0?h.value/h.units:0,currency:'EUR'};
-            state.assets.push(asset);byName.set(key,asset);added++;
-          }else{asset.name=h.name;asset.units=h.units;asset.lastPrice=h.units>0?h.value/h.units:0;asset.currency='EUR';updated++;}
-          const oldInvested=state.deposits.filter(d=>d.assetId===asset.id).reduce((sum,d)=>sum+Number(d.amount||0),0);
-          const delta=h.invested-oldInvested;
-          if(Math.abs(delta)>0.005)state.deposits.push({id:uid(),date:snapshotDate,assetId:asset.id,amount:delta});
-          mergedValues[asset.id]=h.value;
+        const planned=holdings.map(h=>{
+          const asset=state.assets.find(a=>String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
+          return {h,assetId:asset?asset.id:null};
         });
-        const totalValue=state.assets.reduce((sum,a)=>sum+(mergedValues[a.id]||0),0);
-        state.assets.forEach(a=>{a.target=totalValue>0?(mergedValues[a.id]||0)/totalValue*100:0;});
+        const added=planned.filter(x=>!x.assetId).length, updated=planned.length-added;
         const totalInvested=holdings.reduce((sum,h)=>sum+h.invested,0);
         const totalResult=holdings.reduce((sum,h)=>sum+h.result,0);
         const totalDividends=holdings.reduce((sum,h)=>sum+h.dividends,0);
@@ -1958,7 +1945,20 @@ function doTrading212Import(file){
           '\nErhaltene Dividenden: '+eur.format(totalDividends)+
           '\n\nDer Import ergänzt das bestehende Portfolio: neue Positionen kommen hinzu, bereits vorhandene werden aktualisiert und nicht enthaltene Positionen bleiben erhalten. Ein neuer Wert-Snapshot wird angefügt. Fortfahren?';
         if(!confirm(msg))return;
-        const prev=JSON.stringify(state);
+        const prev=JSON.stringify(state), colors=COLORS, mergedValues=Object.assign({},existingValues);
+        holdings.forEach(h=>{
+          let asset=state.assets.find(a=>String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
+          if(!asset){
+            asset={id:'t212_'+uid(),name:h.name,target:0,color:colors[state.assets.length%colors.length],fx:false,units:h.units,lastPrice:h.units>0?h.value/h.units:0,currency:'EUR'};
+            state.assets.push(asset);
+          }else{asset.name=h.name;asset.units=h.units;asset.lastPrice=h.units>0?h.value/h.units:0;asset.currency='EUR';}
+          const oldInvested=state.deposits.filter(d=>d.assetId===asset.id).reduce((sum,d)=>sum+Number(d.amount||0),0);
+          const delta=h.invested-oldInvested;
+          if(Math.abs(delta)>0.005)state.deposits.push({id:uid(),date:snapshotDate,assetId:asset.id,amount:delta});
+          mergedValues[asset.id]=h.value;
+        });
+        const totalValue=state.assets.reduce((sum,a)=>sum+(mergedValues[a.id]||0),0);
+        state.assets.forEach(a=>{a.target=totalValue>0?(mergedValues[a.id]||0)/totalValue*100:0;});
         state.snapshots.push({date:snapshotDate,values:mergedValues});
         save();C=compute();renderActive(true);
         toastUndo('Trading-212-CSV ergänzt ('+added+' neu, '+updated+' aktualisiert)',prev);
