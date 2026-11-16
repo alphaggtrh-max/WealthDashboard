@@ -1910,6 +1910,44 @@ function doTrading212Import(file){
   fr.onload=()=>{
     try{
       const rows=parseTrading212CSV(fr.result).map((r,i)=>({r,i,date:t212Date(t212Field(r,[k=>k==='time',k=>k==='date',k=>k==='timestamp']))})).sort((a,b)=>a.date.localeCompare(b.date)||a.i-b.i);
+      const firstRow=rows.length?rows[0].r:{};
+      const hasPortfolioSnapshot=['name','investedvalue','value','result','ownedquantity'].every(k=>Object.keys(firstRow).some(h=>t212Key(h)===k));
+      if(hasPortfolioSnapshot){
+        const snapshotDate=todayISO(), colors=COLORS, holdings=rows.map(item=>{
+          const r=item.r;
+          return {
+            name:String(t212Field(r,[k=>k==='name'])).trim(),
+            invested:Math.abs(t212Number(t212Field(r,[k=>k==='investedvalue']))),
+            value:Math.abs(t212Number(t212Field(r,[k=>k==='value']))),
+            result:t212Number(t212Field(r,[k=>k==='result'])),
+            units:Math.abs(t212Number(t212Field(r,[k=>k==='ownedquantity']))),
+            dividends:t212Number(t212Field(r,[k=>k==='dividendsgained']))
+          };
+        }).filter(h=>h.name&&h.units>0&&(h.invested>0||h.value>0));
+        if(!holdings.length)throw new Error('Portfolio-CSV erkannt, aber keine gültigen Positionen mit Name, Invested value, Value und Owned quantity gefunden.');
+        const totalValue=holdings.reduce((sum,h)=>sum+h.value,0);
+        const totalInvested=holdings.reduce((sum,h)=>sum+h.invested,0);
+        const totalResult=holdings.reduce((sum,h)=>sum+h.result,0);
+        const totalDividends=holdings.reduce((sum,h)=>sum+h.dividends,0);
+        const summary=holdings.slice(0,12).map(h=>h.name+': '+eur.format(h.value)+' (Ergebnis '+eur.format(h.result)+')').join('\n');
+        const msg='Trading-212-Portfolio-CSV erkannt: '+holdings.length+' Positionen.\n\n'+summary+
+          (holdings.length>12?'\n… und '+(holdings.length-12)+' weitere':'')+
+          '\n\nAktueller Depotwert laut CSV: '+eur.format(totalValue)+
+          '\nInvestierter Wert: '+eur.format(totalInvested)+
+          '\nErgebnis laut CSV: '+eur.format(totalResult)+
+          '\nErhaltene Dividenden: '+eur.format(totalDividends)+
+          '\n\nDer Import ersetzt Positionen, Buchungen und Wert-Snapshots. Budget und Rechner-Einstellungen bleiben erhalten. Fortfahren?';
+        if(!confirm(msg))return;
+        const prev=JSON.stringify(state);
+        state.assets=holdings.map((h,i)=>({id:'t212_'+uid(),name:h.name,target:totalValue>0?h.value/totalValue*100:0,color:colors[i%colors.length],fx:false,units:h.units,lastPrice:h.units>0?h.value/h.units:0,currency:'EUR'}));
+        state.deposits=holdings.map((h,i)=>({id:uid(),date:snapshotDate,assetId:state.assets[i].id,amount:h.invested})).filter(d=>d.amount>0);
+        const values={};state.assets.forEach((a,i)=>{values[a.id]=holdings[i].value;});
+        state.snapshots=[{date:snapshotDate,values}];
+        state.transfers=[];
+        save();C=compute();renderActive(true);
+        toastUndo('Trading-212-Portfolio-Snapshot importiert',prev);
+        return;
+      }
       const holdings=new Map();let tradeRows=0,latest='',hasCurrentValues=false;
       rows.forEach(item=>{
         const r=item.r,date=item.date;
