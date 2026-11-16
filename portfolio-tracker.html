@@ -378,11 +378,13 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
           <hr>
           <button id="btnExport" type="button">Daten exportieren</button>
           <button id="btnImport" type="button">Daten importieren</button>
+          <button id="btnCsvImport" type="button">Trading-212-CSV importieren</button>
           <hr>
           <button id="btnReset" type="button" class="danger">Alles zurücksetzen</button>
         </div>
       </details>
       <input type="file" id="fileImport" accept="application/json,.json" hidden>
+      <input type="file" id="fileTrading212" accept=".csv,text/csv" hidden>
     </div>
   </header>
 
@@ -589,7 +591,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
 
       <div class="card">
         <h2>Depotwert aktualisieren</h2>
-        <p class="muted" style="margin:0 0 10px;font-size:14px">Trage den aktuellen Wert jeder Position aus deinem Broker ein. Jeder Eintrag wird ein Punkt im Verlauf.</p>
+        <p class="muted" style="margin:0 0 10px;font-size:14px">Trage den aktuellen Wert jeder Position aus deinem Broker ein. Jeder Eintrag wird ein Punkt im Verlauf. Trading-212-CSV-Importe rekonstruieren Stückzahlen aus Käufen und Verkäufen; ohne aktuelle Kursdaten wird der letzte Ausführungskurs als Schätzwert verwendet.</p>
         <form id="fSnap">
           <div style="max-width:200px;margin-bottom:10px"><label for="snapDate">Stand</label><input id="snapDate" type="date" required></div>
           <div id="snapInputs"></div>
@@ -859,7 +861,7 @@ function sanitize(o){
       if(String(a.color).toLowerCase()===OLDCOL[id]) color=def.color;
       if(id==='a3'&&/alphabet/i.test(String(a.name))) fx=false;
     }
-    return {id:id,name:String(a.name||'Position'),target:isFinite(Number(a.target))?Number(a.target):0,color:color,fx:fx};
+    return {id:id,name:String(a.name||'Position'),target:isFinite(Number(a.target))?Number(a.target):0,color:color,fx:fx,ticker:String(a.ticker||''),isin:String(a.isin||''),units:Number.isFinite(Number(a.units))?Number(a.units):0,lastPrice:Number.isFinite(Number(a.lastPrice))?Number(a.lastPrice):0,currency:String(a.currency||'')};
   });
   const ids=new Set(assets.map(a=>a.id));
   const deposits=(Array.isArray(o.deposits)?o.deposits:[])
@@ -1635,7 +1637,7 @@ function renderAssets(c){
     const paid=c.paidBy[a.id]||0, val=c.last?c.valueBy[a.id]:null, ps=c.last?c.paidBySnap[a.id]:null;
     let ret='–';
     if(val!=null&&ps>0){ const r=(val-ps)/ps*100; ret='<span class="'+(r>=0?'pos':'neg')+'">'+sgn(r)+pct(Math.abs(r),2)+'</span>'; }
-    return '<tr><td><i class="dot" style="background:'+a.color+'"></i><input class="inl name" data-act="name" data-id="'+a.id+'" value="'+esc(a.name)+'"></td>'+
+    return '<tr><td><i class="dot" style="background:'+a.color+'"></i><input class="inl name" data-act="name" data-id="'+a.id+'" value="'+esc(a.name)+'">'+(a.ticker?'<div class="muted" style="font-size:11px;margin-left:18px">'+esc(a.ticker)+(a.units?' · '+new Intl.NumberFormat('de-DE',{maximumFractionDigits:8}).format(a.units)+' Stk.':'')+'</div>':'')+'</td>'+
       '<td><input class="inl num" data-act="target" data-id="'+a.id+'" inputmode="decimal" value="'+fmtIn(a.target)+'"> %</td>'+
       '<td><input type="checkbox" class="fx" data-act="fx" data-id="'+a.id+'"'+(a.fx?' checked':'')+' aria-label="Fremdwährung"></td><td class="r">'+eur.format(paid)+'</td><td class="r">'+(val==null?'–':eur.format(val))+'</td><td class="r">'+ret+'</td>'+
       '<td class="r"><button type="button" class="icon" data-act="delAsset" data-id="'+a.id+'" title="Position entfernen">✕</button></td></tr>';
@@ -1859,6 +1861,89 @@ function doExport(){
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   lsSet(EXP_KEY,String(Date.now())); renderBackup();
 }
+function parseTrading212CSV(text){
+  text=String(text||'').replace(/^\uFEFF/,'');
+  const first=(text.split(/\r?\n/).find(x=>x.trim())||'');
+  const semi=(first.match(/;/g)||[]).length, comma=(first.match(/,/g)||[]).length, delim=semi>comma?';':',';
+  const rows=[]; let row=[],cell='',quoted=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(ch==='"'&&quoted&&text[i+1]==='"'){cell+='"';i++;}
+    else if(ch==='"') quoted=!quoted;
+    else if(ch===delim&&!quoted){row.push(cell);cell='';}
+    else if((ch==='\n'||ch==='\r')&&!quoted){if(ch==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(v=>v.trim()))rows.push(row);row=[];cell='';}
+    else cell+=ch;
+  }
+  row.push(cell);if(row.some(v=>v.trim()))rows.push(row);
+  if(rows.length<2)throw new Error('Die CSV enthält keine auswertbaren Datenzeilen.');
+  const headers=rows.shift().map(h=>h.trim().replace(/^"|"$/g,''));
+  return rows.map(r=>{const o={};headers.forEach((h,i)=>o[h]=(r[i]||'').trim());return o;});
+}
+function t212Key(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');}
+function t212Field(row,tests){
+  const keys=Object.keys(row);
+  for(const test of tests){const k=keys.find(x=>test(t212Key(x)));if(k)return row[k];}
+  return '';
+}
+function t212Number(v){
+  let s=String(v||'').trim().replace(/[€$£\s]/g,'').replace(/[^0-9,.-]/g,'');
+  if(!s)return 0;
+  if(s.includes(',')&&s.includes('.'))s=s.lastIndexOf(',')>s.lastIndexOf('.')?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+  else if(s.includes(','))s=s.replace(',','.');
+  const n=Number(s);return Number.isFinite(n)?n:0;
+}
+function t212Date(v){
+  const s=String(v||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
+  const d=new Date(s);return Number.isFinite(d.getTime())?iso(d):todayISO();
+}
+function doTrading212Import(file){
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      const rows=parseTrading212CSV(fr.result);
+      const holdings=new Map();let tradeRows=0,latest='';
+      rows.forEach(r=>{
+        const action=String(t212Field(r,[k=>k==='action',k=>k==='type'])).toLowerCase();
+        const ticker=String(t212Field(r,[k=>k==='ticker',k=>k==='symbol'])).trim();
+        const isin=String(t212Field(r,[k=>k==='isin'])).trim();
+        const name=String(t212Field(r,[k=>k==='name',k=>k==='instrument'])).trim();
+        const shares=t212Number(t212Field(r,[k=>k==='noofshares',k=>k==='shares',k=>k==='quantity',k=>k==='units']));
+        const price=t212Number(t212Field(r,[k=>k==='priceshare',k=>k==='pricepershare',k=>k==='price']));
+        const date=t212Date(t212Field(r,[k=>k==='time',k=>k==='date',k=>k==='timestamp']));
+        const buy=/buy|kauf|purchase/.test(action),sell=/sell|verkauf/.test(action);
+        if(!buy&&!sell)return;
+        if(!(shares>0)||!(price>0)||(!ticker&&!isin&&!name))return;
+        const key=(isin||ticker||name).toUpperCase();
+        let h=holdings.get(key);
+        if(!h){h={name:name||ticker||isin,ticker,isin,units:0,cost:0,lastPrice:price,currency:String(t212Field(r,[k=>k.includes('currency')&&k.includes('price')])).trim(),first:date,last:date};holdings.set(key,h);}
+        if(buy){h.cost+=shares*price;h.units+=shares;}
+        else if(sell&&h.units>0){const sold=Math.min(shares,h.units);h.cost-=h.cost*(sold/h.units);h.units-=sold;}
+        h.lastPrice=price;h.last=date;if(!latest||date>latest)latest=date;tradeRows++;
+      });
+      const open=[...holdings.values()].filter(h=>h.units>1e-8);
+      if(!open.length)throw new Error('Keine offenen Wertpapierbestände erkannt. Prüfe, ob die CSV ausgeführte Käufe und Verkäufe mit Spalten wie Ticker, No. of shares und Price / share enthält.');
+      const totalValue=open.reduce((sum,h)=>sum+h.units*h.lastPrice,0);
+      const summary=open.slice(0,12).map(h=>h.name+': '+new Intl.NumberFormat('de-DE',{maximumFractionDigits:6}).format(h.units)+' Stk.').join('\n');
+      const msg='Trading-212-CSV erkannt: '+tradeRows+' Kauf-/Verkaufszeilen, '+open.length+' offene Positionen.\n\nBeispielbestände:\n'+summary+
+        (open.length>12?'\n… und '+(open.length-12)+' weitere':'')+
+        '\n\nGeschätzter Depotwert anhand des jeweils letzten Ausführungskurses: '+eur.format(totalValue)+
+        '\n\nDer Import ersetzt die bisherigen Portfolio-Positionen, Buchungen und Wert-Snapshots. Budget und Rechner-Einstellungen bleiben erhalten. Fortfahren?';
+      if(!confirm(msg))return;
+      const prev=JSON.stringify(state), colors=COLORS;
+      state.assets=open.map((h,i)=>({id:'t212_'+uid(),name:h.name,target:totalValue>0?(h.units*h.lastPrice/totalValue*100):0,color:colors[i%colors.length],fx:!!h.currency&&h.currency.toUpperCase()!=='EUR',ticker:h.ticker,isin:h.isin,units:h.units,lastPrice:h.lastPrice,currency:h.currency}));
+      state.deposits=open.map((h,i)=>({id:uid(),date:h.first||latest||todayISO(),assetId:state.assets[i].id,amount:Math.max(0,h.cost)})).filter(d=>d.amount>0);
+      const values={};state.assets.forEach((a,i)=>{values[a.id]=open[i].units*open[i].lastPrice;});
+      state.snapshots=[{date:latest||todayISO(),values}];
+      state.transfers=[];
+      save();C=compute();renderActive(true);
+      toastUndo('Trading-212-Portfolio importiert (Kurse geschätzt)',prev);
+    }catch(err){alert('Trading-212-Import fehlgeschlagen: '+err.message);}
+  };
+  fr.onerror=()=>alert('Die CSV-Datei konnte nicht gelesen werden.');
+  fr.readAsText(file);
+}
+
 function doImport(file){
   const fr=new FileReader();
   fr.onload=()=>{
@@ -1889,6 +1974,8 @@ $('#btnRb').addEventListener('click',e=>{
 $('#btnExport').addEventListener('click',doExport);
 $('#btnImport').addEventListener('click',()=>$('#fileImport').click());
 $('#fileImport').addEventListener('change',e=>{ if(e.target.files[0]) doImport(e.target.files[0]); e.target.value=''; });
+$('#btnCsvImport').addEventListener('click',()=>$('#fileTrading212').click());
+$('#fileTrading212').addEventListener('change',e=>{ if(e.target.files[0]) doTrading212Import(e.target.files[0]); e.target.value=''; });
 $('#btnReset').addEventListener('click',()=>{
   if(!confirm('Wirklich alle Daten löschen und neu starten?')) return;
   const prev=JSON.stringify(state);
