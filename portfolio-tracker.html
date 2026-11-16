@@ -1913,6 +1913,7 @@ function doTrading212Import(file){
   fr.onload=()=>{
     try{
       const rows=parseTrading212CSV(fr.result).map((r,i)=>({r,i,date:t212Date(t212Field(r,[k=>k==='time',k=>k==='date',k=>k==='timestamp']))})).sort((a,b)=>a.date.localeCompare(b.date)||a.i-b.i);
+      const firstRow=rows.length?rows[0].r:{};
       const planName=t212PlanName(file), existingPlan=state.plans.find(p=>String(p.name||'').trim().toLowerCase()===planName.toLowerCase());
       const hasPortfolioSnapshot=['name','investedvalue','value','result','ownedquantity'].every(k=>Object.keys(firstRow).some(h=>t212Key(h)===k));
       if(hasPortfolioSnapshot){
@@ -1949,19 +1950,14 @@ function doTrading212Import(file){
           '\n\nSparplan-Topf: '+planName+(existingPlan?' (wird aktualisiert)':' (wird neu angelegt)')+
           '\nDie CSV-Positionen werden diesem Topf zugeordnet. Andere Sparplan-Töpfe bleiben unverändert. Fortfahren?';
         if(!confirm(msg))return;
-        const prev=JSON.stringify(state), mergedValues=Object.assign({},existingValues), plan=t212GetPlan(planName), seen=new Set();
-        state.assets.filter(a=>a.planId===plan.id).forEach(a=>{a.planId='';a.planTarget=0;});
+        const prev=JSON.stringify(state), mergedValues=Object.assign({},existingValues), plan=t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id);
+        oldPlanAssets.forEach(a=>{a.planId='';a.planTarget=0;mergedValues[a.id]=0;});
         holdings.forEach(h=>{
-          let asset=state.assets.find(a=>a.planId===plan.id&&String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
-          if(!asset){
-            asset=state.assets.find(a=>!a.planId&&String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
-            if(asset){asset.planId=plan.id;}
-          }
+          let asset=oldPlanAssets.find(a=>String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
           if(!asset){
             asset={id:'t212_'+uid(),name:h.name,target:0,planId:plan.id,planTarget:0,color:colors[state.assets.length%colors.length],fx:false,units:h.units,lastPrice:h.units>0?h.value/h.units:0,currency:'EUR'};
             state.assets.push(asset);
           }else{asset.name=h.name;asset.planId=plan.id;asset.units=h.units;asset.lastPrice=h.units>0?h.value/h.units:0;asset.currency='EUR';}
-          seen.add(asset.id);
           const oldInvested=state.deposits.filter(d=>d.assetId===asset.id).reduce((sum,d)=>sum+Number(d.amount||0),0);
           const delta=h.invested-oldInvested;
           if(Math.abs(delta)>0.005)state.deposits.push({id:uid(),date:snapshotDate,assetId:asset.id,amount:delta});
