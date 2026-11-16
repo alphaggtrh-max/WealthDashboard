@@ -1905,7 +1905,7 @@ function t212CurrentValue(row,exchange){
   const currency=String(t212Field(row,[k=>k==='currencyvalue',k=>k==='valuecurrency',k=>k==='currency'])).trim().toUpperCase();
   return Math.abs(raw)*(currency&&currency!=='EUR'?(exchange||1):1);
 }
-function t212PlanName(file){return String(file&&file.name||'Trading 212').replace(/\\.[^.]+$/,'').trim().slice(0,60)||'Trading 212';}
+function t212PlanName(file){return String(file&&file.name||'Trading 212').replace(/\.[^.]+$/,'').trim().slice(0,60)||'Trading 212';}
 function t212GetPlan(name){let p=state.plans.find(x=>String(x.name||'').trim().toLowerCase()===name.trim().toLowerCase());if(!p){p={id:'plan_'+uid(),name:name,monthly:0};state.plans.push(p);}return p;}
 function t212PlanWeight(assets,values){const total=assets.reduce((sum,a)=>sum+Math.max(0,Number(values[a.id])||0),0);assets.forEach(a=>a.planTarget=total>0?Math.max(0,Number(values[a.id])||0)/total*100:100/assets.length);}
 function doTrading212Import(file){
