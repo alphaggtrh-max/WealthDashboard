@@ -827,7 +827,7 @@ function fresh(){
     v:3,
     settings:{monthly:900,lump:2600,startDate:todayISO(),fxFee:0.5},
     calc:Object.assign({},DEF_CALC),
-    assets:DEFAULT_ASSETS.map(a=>Object.assign({},a)),
+    assets:DEFAULT_ASSETS.map(a=>Object.assign({planId:'p1',planTarget:a.target},a)),
     plans:[{id:'p1',name:'Sparplan 1',monthly:900}],
     deposits:[],
     snapshots:[],
@@ -2002,7 +2002,7 @@ function doTrading212Import(file){
         '\n\nDer Import ersetzt die bisherigen Portfolio-Positionen, Buchungen und Wert-Snapshots. Budget und Rechner-Einstellungen bleiben erhalten. Fortfahren?';
       if(!confirm(msg))return;
       const prev=JSON.stringify(state), colors=COLORS;
-      state.assets=open.map((h,i)=>({id:'t212_'+uid(),name:h.name,target:totalValue>0?(h.units*h.lastPrice/totalValue*100):0,planId:state.plans[0].id,planTarget:0,color:colors[i%colors.length],fx:!!h.currency&&h.currency.toUpperCase()!=='EUR',ticker:h.ticker,isin:h.isin,units:h.units,lastPrice:h.lastPrice,currency:h.currency}));
+      state.assets=open.map((h,i)=>({id:'t212_'+uid(),name:h.name,target:totalValue>0?(h.units*h.lastPrice/totalValue*100):0,planId:state.plans[0].id,planTarget:totalValue>0?(h.units*h.lastPrice/totalValue*100):100/open.length,color:colors[i%colors.length],fx:!!h.currency&&h.currency.toUpperCase()!=='EUR',ticker:h.ticker,isin:h.isin,units:h.units,lastPrice:h.lastPrice,currency:h.currency}));
       state.deposits=open.map((h,i)=>({id:uid(),date:h.first||latest||todayISO(),assetId:state.assets[i].id,amount:Math.max(0,h.cost)})).filter(d=>d.amount>0);
       const values={};state.assets.forEach((a,i)=>{values[a.id]=open[i].units*open[i].lastPrice;});
       state.snapshots=[{date:latest||todayISO(),values}];
