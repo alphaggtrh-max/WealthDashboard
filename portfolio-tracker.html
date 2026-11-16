@@ -1945,7 +1945,7 @@ function doTrading212Import(file){
           '\nErhaltene Dividenden: '+eur.format(totalDividends)+
           '\n\nDer Import ergänzt das bestehende Portfolio: neue Positionen kommen hinzu, bereits vorhandene werden aktualisiert und nicht enthaltene Positionen bleiben erhalten. Ein neuer Wert-Snapshot wird angefügt. Fortfahren?';
         if(!confirm(msg))return;
-        const prev=JSON.stringify(state), colors=COLORS, mergedValues=Object.assign({},existingValues);
+        const prev=JSON.stringify(state), mergedValues=Object.assign({},existingValues);
         holdings.forEach(h=>{
           let asset=state.assets.find(a=>String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
           if(!asset){
