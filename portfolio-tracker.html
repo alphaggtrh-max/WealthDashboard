@@ -2093,7 +2093,7 @@ CF.forEach(f=>{
   $('#'+f[0]).addEventListener('input',e=>{
     const v=parseNum(e.target.value);
     if(!isFinite(v)||v<f[3]||v>f[4]) return;
-    state[f[1]][f[2]]=v; save(); scheduleCalc();
+    if(f[0]==='cMonthly'){const old=state.plans.reduce((sum,p)=>sum+p.monthly,0);state.plans.forEach(p=>p.monthly=old>0?v*p.monthly/old:v/state.plans.length);syncPlanTargets();}else state[f[1]][f[2]]=v; save(); scheduleCalc();
   });
 });
 CR.forEach(f=>{
@@ -2115,7 +2115,7 @@ $('#zPlay').addEventListener('click',playZ);
 $('#zRange').addEventListener('input',e=>{ stopZ(); const k=Number(e.target.value); Z.full=k>=Z.n; if(Z.h) Z.h.setM(k); });
 $('#heat').addEventListener('click',e=>{
   const b=e.target.closest('button[data-m]'); if(!b) return;
-  state.settings.monthly=Number(b.dataset.m); state.calc.years=Number(b.dataset.y); heatWave={r:+b.dataset.r,c:+b.dataset.c}; save(); C=compute(); renderCalc(false);
+  const nextMonthly=Number(b.dataset.m),oldMonthly=state.plans.reduce((sum,p)=>sum+p.monthly,0);state.plans.forEach(p=>p.monthly=oldMonthly>0?nextMonthly*p.monthly/oldMonthly:nextMonthly/state.plans.length);syncPlanTargets(); state.calc.years=Number(b.dataset.y); heatWave={r:+b.dataset.r,c:+b.dataset.c}; save(); C=compute(); renderCalc(false);
 });
 
 // Daten-Eingaben
