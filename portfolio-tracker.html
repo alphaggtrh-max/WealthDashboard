@@ -589,6 +589,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
         </form>
       </div>
 
+      <div class="card"><div class="cardhead"><h2>Sparplan-Töpfe</h2><button type="button" id="btnAddPlan">+ Topf hinzufügen</button></div><p class="lead">Ordne Positionen verschiedenen Sparplänen zu. Jeder Topf hat eine eigene Monatsrate; die Allokation seiner Positionen muss zusammen 100 % ergeben.</p><div id="plansEditor"></div><p class="info" id="plansInfo"></p></div>
       <div class="card">
         <h2>Depotwert aktualisieren</h2>
         <p class="muted" style="margin:0 0 10px;font-size:14px">Trage den aktuellen Wert jeder Position aus deinem Broker ein. Jeder Eintrag wird ein Punkt im Verlauf. Trading-212-CSV-Importe rekonstruieren Stückzahlen aus Käufen und Verkäufen; ohne aktuelle Kursdaten wird der letzte Ausführungskurs als Schätzwert verwendet.</p>
@@ -607,7 +608,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
       </div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>Position</th><th>Soll</th><th title="Position wird nicht in EUR gehandelt (z. B. USD): XTB berechnet die Umrechnungsgebühr">FX-Gebühr</th><th class="r">Eingezahlt</th><th class="r">Wert</th><th class="r">Rendite</th><th></th></tr></thead>
+          <thead><tr><th>Position</th><th>Sparplan / Anteil</th><th title="Position wird nicht in EUR gehandelt (z. B. USD): XTB berechnet die Umrechnungsgebühr">FX-Gebühr</th><th class="r">Eingezahlt</th><th class="r">Wert</th><th class="r">Rendite</th><th></th></tr></thead>
           <tbody id="assetsBody"></tbody>
         </table>
       </div>
@@ -827,6 +828,7 @@ function fresh(){
     settings:{monthly:900,lump:2600,startDate:todayISO(),fxFee:0.5},
     calc:Object.assign({},DEF_CALC),
     assets:DEFAULT_ASSETS.map(a=>Object.assign({},a)),
+    plans:[{id:'p1',name:'Sparplan 1',monthly:900}],
     deposits:[],
     snapshots:[],
     transfers:[]
@@ -864,6 +866,10 @@ function sanitize(o){
     return {id:id,name:String(a.name||'Position'),target:isFinite(Number(a.target))?Number(a.target):0,color:color,fx:fx,ticker:String(a.ticker||''),isin:String(a.isin||''),units:Number.isFinite(Number(a.units))?Number(a.units):0,lastPrice:Number.isFinite(Number(a.lastPrice))?Number(a.lastPrice):0,currency:String(a.currency||'')};
   });
   const ids=new Set(assets.map(a=>a.id));
+  let plans=Array.isArray(o.plans)?o.plans.filter(p=>p&&typeof p==='object').map((p,i)=>({id:String(p.id||('p'+(i+1))),name:String(p.name||('Sparplan '+(i+1))).slice(0,60),monthly:numOr(p.monthly,0,0,1e7)})):[];
+  if(!plans.length)plans=[{id:'p1',name:'Sparplan 1',monthly:st.monthly}];
+  const planIds=new Set(plans.map(p=>p.id));
+  assets.forEach(a=>{if(!planIds.has(String(a.planId||'')))a.planId=plans[0].id;else a.planId=String(a.planId);a.planTarget=Number.isFinite(Number(a.planTarget))?clamp(Number(a.planTarget),0,100):a.target;});
   const deposits=(Array.isArray(o.deposits)?o.deposits:[])
     .filter(d=>d&&isDate(d.date)&&ids.has(d.assetId)&&isFinite(Number(d.amount)))
     .map(d=>({id:String(d.id||uid()),date:d.date,assetId:d.assetId,amount:Number(d.amount)}));
@@ -875,7 +881,7 @@ function sanitize(o){
       return {date:s.date,values:values};
     });
   const transfers=(Array.isArray(o.transfers)?o.transfers:[]).filter(t=>t&&isDate(t.date)&&ids.has(t.assetId)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0).map(t=>({id:String(t.id||uid()),date:t.date,assetId:t.assetId,amount:Number(t.amount),note:String(t.note||'')}));
-  return {v:3,settings:st,calc:calc,assets:assets,deposits:deposits,snapshots:snapshots,transfers:transfers};
+  return {v:3,settings:st,calc:calc,assets:assets,plans:plans,deposits:deposits,snapshots:snapshots,transfers:transfers};
 }
 function load(){
   try{ const raw=localStorage.getItem(KEY); if(!raw) return null; return sanitize(JSON.parse(raw)); }
@@ -912,17 +918,9 @@ function compute(){
   }
   return {deposits:deposits,paidBy:paidBy,total:total,cash:budgetCashBalance(),snaps:snaps,last:last,value:value,valueBy:valueBy,paidBySnap:paidBySnap,paidAtSnap:paidAtSnap};
 }
-function targetSum(){ return state.assets.reduce((s,a)=>s+a.target,0); }
-function splitAmount(total){
-  if(Math.abs(targetSum()-100)>0.01) return null;
-  const parts=state.assets.map(a=>({assetId:a.id,cents:Math.round(total*a.target)}));
-  const diff=Math.round(total*100)-parts.reduce((s,p)=>s+p.cents,0);
-  if(diff!==0){
-    let idx=0; state.assets.forEach((a,i)=>{ if(a.target>state.assets[idx].target) idx=i; });
-    parts[idx].cents+=diff;
-  }
-  return parts.filter(p=>p.cents>0).map(p=>({assetId:p.assetId,amount:p.cents/100}));
-}
+function syncPlanTargets(){if(!Array.isArray(state.plans)||!state.plans.length)state.plans=[{id:'p1',name:'Sparplan 1',monthly:state.settings.monthly}];const total=state.plans.reduce((sum,p)=>sum+Math.max(0,Number(p.monthly)||0),0);state.settings.monthly=total;state.assets.forEach(a=>{const p=state.plans.find(x=>x.id===a.planId)||state.plans[0];if(p&&a.planId!==p.id)a.planId=p.id;a.target=total>0&&p?(Math.max(0,Number(p.monthly)||0)/total)*(Number(a.planTarget)||0):0;});}
+function targetSum(){syncPlanTargets();return state.assets.reduce((s,a)=>s+a.target,0);}
+function splitAmount(total){syncPlanTargets();const active=state.plans.filter(p=>Number(p.monthly)>0);if(!active.length||active.some(p=>{const aa=state.assets.filter(a=>a.planId===p.id);return !aa.length||Math.abs(aa.reduce((v,a)=>v+(Number(a.planTarget)||0),0)-100)>0.01;}))return null;const parts=[];active.forEach(p=>{const aa=state.assets.filter(a=>a.planId===p.id),gc=Math.round(total*p.monthly/state.settings.monthly*100);let used=0;aa.forEach((a,i)=>{const cents=i===aa.length-1?gc-used:Math.round(gc*a.planTarget/100);used+=cents;parts.push({assetId:a.id,cents});});});const diff=Math.round(total*100)-parts.reduce((v,p)=>v+p.cents,0);if(diff&&parts.length)parts[parts.length-1].cents+=diff;return parts.filter(p=>p.cents>0).map(p=>({assetId:p.assetId,amount:p.cents/100}));}
 function nextInfo(){
   const st=parseISO(state.settings.startDate), t=noon();
   let k=0, d=new Date(st);
@@ -1638,7 +1636,7 @@ function renderAssets(c){
     let ret='–';
     if(val!=null&&ps>0){ const r=(val-ps)/ps*100; ret='<span class="'+(r>=0?'pos':'neg')+'">'+sgn(r)+pct(Math.abs(r),2)+'</span>'; }
     return '<tr><td><i class="dot" style="background:'+a.color+'"></i><input class="inl name" data-act="name" data-id="'+a.id+'" value="'+esc(a.name)+'">'+(a.ticker?'<div class="muted" style="font-size:11px;margin-left:18px">'+esc(a.ticker)+(a.units?' · '+new Intl.NumberFormat('de-DE',{maximumFractionDigits:8}).format(a.units)+' Stk.':'')+'</div>':'')+'</td>'+
-      '<td><input class="inl num" data-act="target" data-id="'+a.id+'" inputmode="decimal" value="'+fmtIn(a.target)+'"> %</td>'+
+      '<td><select data-act="plan" data-id="'+esc(a.id)+'" aria-label="Sparplan zuweisen">'+state.plans.map(p=>'<option value="'+esc(p.id)+'"'+(a.planId===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select><div class="muted small">'+pct(a.planTarget,1)+' im Topf</div></td>'+
       '<td><input type="checkbox" class="fx" data-act="fx" data-id="'+a.id+'"'+(a.fx?' checked':'')+' aria-label="Fremdwährung"></td><td class="r">'+eur.format(paid)+'</td><td class="r">'+(val==null?'–':eur.format(val))+'</td><td class="r">'+ret+'</td>'+
       '<td class="r"><button type="button" class="icon" data-act="delAsset" data-id="'+a.id+'" title="Position entfernen">✕</button></td></tr>';
   }).join('');
@@ -1663,13 +1661,15 @@ function renderTransfers(){
   const rows=(state.transfers||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
   $('#transferBody').innerHTML=rows.length?rows.map(t=>{const a=state.assets.find(x=>x.id===t.assetId);return '<tr><td>'+fmtDate(t.date)+'</td><td>'+esc(a?a.name:'Unbekannte Position')+'</td><td>'+esc(t.note||'–')+'</td><td class="r">'+eur.format(t.amount)+'</td><td class="r"><button type="button" class="icon" data-transferdel="'+esc(t.id)+'" title="Umbuchung löschen">✕</button></td></tr>';}).join(''):'<tr><td colspan="5" class="muted">Noch keine Umbuchungen erfasst.</td></tr>';
 }
+function renderPlans(){const host=$('#plansEditor');host.innerHTML=state.plans.map(p=>{const aa=state.assets.filter(a=>a.planId===p.id),sum=aa.reduce((v,a)=>v+(Number(a.planTarget)||0),0);return '<div class="card" style="margin:10px 0;padding:14px"><div class="row" style="align-items:end"><div><label>Topfname</label><input data-plan-name="'+esc(p.id)+'" value="'+esc(p.name)+'"></div><div><label>Monatliche Sparrate (€)</label><input data-plan-monthly="'+esc(p.id)+'" inputmode="decimal" value="'+fmtIn(p.monthly)+'"></div><div style="flex:0 0 auto"><button type="button" class="icon" data-plan-del="'+esc(p.id)+'" '+(state.plans.length===1?'disabled':'')+'>✕</button></div></div><div class="tablewrap"><table><thead><tr><th>Position</th><th>Allokation im Topf</th><th class="r">Monatlicher Betrag</th></tr></thead><tbody>'+(aa.length?aa.map(a=>'<tr><td>'+esc(a.name)+'</td><td><input class="inl num" data-plan-weight="'+esc(p.id)+'" data-asset="'+esc(a.id)+'" inputmode="decimal" value="'+fmtIn(a.planTarget)+'"> %</td><td class="r">'+eur.format((Number(p.monthly)||0)*(Number(a.planTarget)||0)/100)+'</td></tr>').join(''):'<tr><td colspan="3" class="muted">Noch keine Positionen zugeordnet.</td></tr>')+'</tbody></table></div><p class="hint">'+aa.length+' Positionen · Allokation: <b class="'+(Math.abs(sum-100)>0.01?'warn':'')+'">'+pct(sum,1)+'</b> (muss 100 % ergeben)</p></div>';}).join('');const invalid=state.plans.filter(p=>p.monthly>0&&Math.abs(state.assets.filter(a=>a.planId===p.id).reduce((v,a)=>v+(Number(a.planTarget)||0),0)-100)>0.01);$('#plansInfo').innerHTML=invalid.length?'<span class="warn">Bitte die Allokation in '+invalid.map(p=>esc(p.name)).join(', ')+' auf 100 % setzen.</span>':'Alle aktiven Sparplan-Töpfe sind korrekt verteilt.';}
 function renderData(){
+  syncPlanTargets();
   const s=state.settings;
   setVal($('#setMonthly'),fmtIn(s.monthly)); setVal($('#setLump'),fmtIn(s.lump)); setVal($('#setFx'),fmtIn(s.fxFee)); setVal($('#setStart'),s.startDate);
   const sum=targetSum(), info=$('#planInfo');
   if(Math.abs(sum-100)>0.01) info.innerHTML='<span class="warn">Die Soll-Verteilung ergibt '+pct(sum,1)+', nicht 100 %. Passe sie unten bei den Positionen an.</span>';
   else info.innerHTML='Deine Rate verteilt sich so: '+state.assets.map(a=>'<b>'+eur.format(s.monthly*a.target/100)+'</b> '+esc(a.name)).join(' · ');
-  renderSnap(C); renderAssets(C); renderDeposits(C); renderTransfers();
+  renderPlans();renderSnap(C); renderAssets(C); renderDeposits(C); renderTransfers();
 }
 
 /* ================= Monatsbudget ================= */
@@ -1949,7 +1949,7 @@ function doTrading212Import(file){
         holdings.forEach(h=>{
           let asset=state.assets.find(a=>String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
           if(!asset){
-            asset={id:'t212_'+uid(),name:h.name,target:0,color:colors[state.assets.length%colors.length],fx:false,units:h.units,lastPrice:h.units>0?h.value/h.units:0,currency:'EUR'};
+            asset={id:'t212_'+uid(),name:h.name,target:0,planId:state.plans[0].id,planTarget:0,color:colors[state.assets.length%colors.length],fx:false,units:h.units,lastPrice:h.units>0?h.value/h.units:0,currency:'EUR'};
             state.assets.push(asset);
           }else{asset.name=h.name;asset.units=h.units;asset.lastPrice=h.units>0?h.value/h.units:0;asset.currency='EUR';}
           const oldInvested=state.deposits.filter(d=>d.assetId===asset.id).reduce((sum,d)=>sum+Number(d.amount||0),0);
@@ -2002,7 +2002,7 @@ function doTrading212Import(file){
         '\n\nDer Import ersetzt die bisherigen Portfolio-Positionen, Buchungen und Wert-Snapshots. Budget und Rechner-Einstellungen bleiben erhalten. Fortfahren?';
       if(!confirm(msg))return;
       const prev=JSON.stringify(state), colors=COLORS;
-      state.assets=open.map((h,i)=>({id:'t212_'+uid(),name:h.name,target:totalValue>0?(h.units*h.lastPrice/totalValue*100):0,color:colors[i%colors.length],fx:!!h.currency&&h.currency.toUpperCase()!=='EUR',ticker:h.ticker,isin:h.isin,units:h.units,lastPrice:h.lastPrice,currency:h.currency}));
+      state.assets=open.map((h,i)=>({id:'t212_'+uid(),name:h.name,target:totalValue>0?(h.units*h.lastPrice/totalValue*100):0,planId:state.plans[0].id,planTarget:0,color:colors[i%colors.length],fx:!!h.currency&&h.currency.toUpperCase()!=='EUR',ticker:h.ticker,isin:h.isin,units:h.units,lastPrice:h.lastPrice,currency:h.currency}));
       state.deposits=open.map((h,i)=>({id:uid(),date:h.first||latest||todayISO(),assetId:state.assets[i].id,amount:Math.max(0,h.cost)})).filter(d=>d.amount>0);
       const values={};state.assets.forEach((a,i)=>{values[a.id]=open[i].units*open[i].lastPrice;});
       state.snapshots=[{date:latest||todayISO(),values}];
@@ -2127,7 +2127,7 @@ function bindNum(sel,obj,key,min,max){
     if(view==='data'){ const s=state.settings, sum=targetSum(); if(Math.abs(sum-100)<=0.01) $('#planInfo').innerHTML='Deine Rate verteilt sich so: '+state.assets.map(a=>'<b>'+eur.format(s.monthly*a.target/100)+'</b> '+esc(a.name)).join(' · '); }
   });
 }
-bindNum('#setMonthly','settings','monthly',0,1e7);
+$('#setMonthly').addEventListener('change',e=>{const v=parseNum(e.target.value);if(!isFinite(v)||v<0||v>1e7)return;const old=state.plans.reduce((s,p)=>s+p.monthly,0);state.plans.forEach(p=>p.monthly=old>0?v*p.monthly/old:v/state.plans.length);syncPlanTargets();save();C=compute();renderActive(false);});
 bindNum('#setLump','settings','lump',0,1e9);
 bindNum('#setFx','settings','fxFee',0,5);
 $('#setStart').addEventListener('change',e=>{ if(isDate(e.target.value)){ state.settings.startDate=e.target.value; save(); } });
@@ -2166,17 +2166,20 @@ $('#fSnap').addEventListener('submit',e=>{
   state.snapshots=state.snapshots.filter(s=>s.date!==date);
   state.snapshots.push({date:date,values:values}); save(); C=compute(); renderActive(true); toast('Depotwert gespeichert');
 });
+$('#btnAddPlan').addEventListener('click',()=>{state.plans.push({id:uid(),name:'Sparplan '+(state.plans.length+1),monthly:0});save();renderActive(false);});
+$('#plansEditor').addEventListener('change',e=>{const t=e.target;if(t.dataset.planName){const p=state.plans.find(x=>x.id===t.dataset.planName);if(p)p.name=t.value.trim().slice(0,60)||p.name;}else if(t.dataset.planMonthly){const p=state.plans.find(x=>x.id===t.dataset.planMonthly),v=parseNum(t.value);if(p&&isFinite(v)&&v>=0&&v<=1e7)p.monthly=v;}else if(t.dataset.planWeight){const a=state.assets.find(x=>x.id===t.dataset.asset),v=parseNum(t.value);if(a&&isFinite(v)&&v>=0&&v<=100)a.planTarget=v;}else return;syncPlanTargets();save();C=compute();renderActive(false);});
+$('#plansEditor').addEventListener('click',e=>{const b=e.target.closest('[data-plan-del]');if(!b||state.plans.length<=1)return;const p=state.plans.find(x=>x.id===b.dataset.planDel),target=state.plans.find(x=>x.id!==p.id);if(!p||!target)return;state.assets.filter(a=>a.planId===p.id).forEach(a=>{a.planId=target.id;a.planTarget=0;});target.monthly+=p.monthly;state.plans=state.plans.filter(x=>x.id!==p.id);syncPlanTargets();save();C=compute();renderActive(false);});
 $('#btnAddAsset').addEventListener('click',()=>{
-  state.assets.push({id:uid(),name:'Neue Position',target:0,color:COLORS[state.assets.length%COLORS.length],fx:false});
+  state.assets.push({id:uid(),name:'Neue Position',target:0,planId:state.plans[0].id,planTarget:0,color:COLORS[state.assets.length%COLORS.length],fx:false});
   save(); C=compute(); renderActive(false);
 });
 $('#assetsBody').addEventListener('change',e=>{
   const t=e.target, act=t.dataset.act, a=state.assets.find(x=>x.id===t.dataset.id); if(!a) return;
   if(act==='name'){ a.name=t.value.trim()||a.name; }
-  else if(act==='target'){ const v=parseNum(t.value); if(isFinite(v)&&v>=0&&v<=100) a.target=v; }
+  else if(act==='plan'){const next=state.plans.find(p=>p.id===t.value);if(next&&next.id!==a.planId){a.planId=next.id;a.planTarget=state.assets.filter(x=>x.planId===next.id&&x.id!==a.id).length?0:100;}}
   else if(act==='fx'){ a.fx=t.checked; }
   else return;
-  save(); C=compute(); renderActive(false);
+  syncPlanTargets();save(); C=compute(); renderActive(false);
 });
 $('#btnCatchup').addEventListener('click',e=>{
   const miss=dueStatuses().filter(s=>!s.done);
