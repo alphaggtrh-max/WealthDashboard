@@ -1905,12 +1905,15 @@ function t212CurrentValue(row,exchange){
   const currency=String(t212Field(row,[k=>k==='currencyvalue',k=>k==='valuecurrency',k=>k==='currency'])).trim().toUpperCase();
   return Math.abs(raw)*(currency&&currency!=='EUR'?(exchange||1):1);
 }
+function t212PlanName(file){return String(file&&file.name||'Trading 212').replace(/\\.[^.]+$/,'').trim().slice(0,60)||'Trading 212';}
+function t212GetPlan(name){let p=state.plans.find(x=>String(x.name||'').trim().toLowerCase()===name.trim().toLowerCase());if(!p){p={id:'plan_'+uid(),name:name,monthly:0};state.plans.push(p);}return p;}
+function t212PlanWeight(assets,values){const total=assets.reduce((sum,a)=>sum+Math.max(0,Number(values[a.id])||0),0);assets.forEach(a=>a.planTarget=total>0?Math.max(0,Number(values[a.id])||0)/total*100:100/assets.length);}
 function doTrading212Import(file){
   const fr=new FileReader();
   fr.onload=()=>{
     try{
       const rows=parseTrading212CSV(fr.result).map((r,i)=>({r,i,date:t212Date(t212Field(r,[k=>k==='time',k=>k==='date',k=>k==='timestamp']))})).sort((a,b)=>a.date.localeCompare(b.date)||a.i-b.i);
-      const firstRow=rows.length?rows[0].r:{};
+      const planName=t212PlanName(file), existingPlan=state.plans.find(p=>String(p.name||'').trim().toLowerCase()===planName.toLowerCase());
       const hasPortfolioSnapshot=['name','investedvalue','value','result','ownedquantity'].every(k=>Object.keys(firstRow).some(h=>t212Key(h)===k));
       if(hasPortfolioSnapshot){
         const snapshotDate=todayISO(), colors=COLORS, holdings=rows.map(item=>{
@@ -1929,7 +1932,7 @@ function doTrading212Import(file){
         const previousSnapshot=state.snapshots.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-1)[0];
         state.assets.forEach(a=>{existingValues[a.id]=previousSnapshot&&Number.isFinite(Number(previousSnapshot.values[a.id]))?Number(previousSnapshot.values[a.id]):0;});
         const planned=holdings.map(h=>{
-          const asset=state.assets.find(a=>String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
+          const asset=existingPlan?state.assets.find(a=>a.planId===existingPlan.id&&String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase()):null;
           return {h,assetId:asset?asset.id:null};
         });
         const added=planned.filter(x=>!x.assetId).length, updated=planned.length-added;
@@ -1943,25 +1946,33 @@ function doTrading212Import(file){
           '\nInvestierter Wert dieser CSV: '+eur.format(totalInvested)+
           '\nErgebnis laut CSV: '+eur.format(totalResult)+
           '\nErhaltene Dividenden: '+eur.format(totalDividends)+
-          '\n\nDer Import ergänzt das bestehende Portfolio: neue Positionen kommen hinzu, bereits vorhandene werden aktualisiert und nicht enthaltene Positionen bleiben erhalten. Ein neuer Wert-Snapshot wird angefügt. Fortfahren?';
+          '\n\nSparplan-Topf: '+planName+(existingPlan?' (wird aktualisiert)':' (wird neu angelegt)')+
+          '\nDie CSV-Positionen werden diesem Topf zugeordnet. Andere Sparplan-Töpfe bleiben unverändert. Fortfahren?';
         if(!confirm(msg))return;
-        const prev=JSON.stringify(state), mergedValues=Object.assign({},existingValues);
+        const prev=JSON.stringify(state), mergedValues=Object.assign({},existingValues), plan=t212GetPlan(planName), seen=new Set();
+        state.assets.filter(a=>a.planId===plan.id).forEach(a=>{a.planId='';a.planTarget=0;});
         holdings.forEach(h=>{
-          let asset=state.assets.find(a=>String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
+          let asset=state.assets.find(a=>a.planId===plan.id&&String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
           if(!asset){
-            asset={id:'t212_'+uid(),name:h.name,target:0,planId:state.plans[0].id,planTarget:0,color:colors[state.assets.length%colors.length],fx:false,units:h.units,lastPrice:h.units>0?h.value/h.units:0,currency:'EUR'};
+            asset=state.assets.find(a=>!a.planId&&String(a.name||'').trim().toLowerCase()===h.name.trim().toLowerCase());
+            if(asset){asset.planId=plan.id;}
+          }
+          if(!asset){
+            asset={id:'t212_'+uid(),name:h.name,target:0,planId:plan.id,planTarget:0,color:colors[state.assets.length%colors.length],fx:false,units:h.units,lastPrice:h.units>0?h.value/h.units:0,currency:'EUR'};
             state.assets.push(asset);
-          }else{asset.name=h.name;asset.units=h.units;asset.lastPrice=h.units>0?h.value/h.units:0;asset.currency='EUR';}
+          }else{asset.name=h.name;asset.planId=plan.id;asset.units=h.units;asset.lastPrice=h.units>0?h.value/h.units:0;asset.currency='EUR';}
+          seen.add(asset.id);
           const oldInvested=state.deposits.filter(d=>d.assetId===asset.id).reduce((sum,d)=>sum+Number(d.amount||0),0);
           const delta=h.invested-oldInvested;
           if(Math.abs(delta)>0.005)state.deposits.push({id:uid(),date:snapshotDate,assetId:asset.id,amount:delta});
           mergedValues[asset.id]=h.value;
         });
+        const planAssets=state.assets.filter(a=>a.planId===plan.id);
+        t212PlanWeight(planAssets,mergedValues);
         const totalValue=state.assets.reduce((sum,a)=>sum+(mergedValues[a.id]||0),0);
-        state.assets.forEach(a=>{a.target=totalValue>0?(mergedValues[a.id]||0)/totalValue*100:0;});
         state.snapshots.push({date:snapshotDate,values:mergedValues});
-        save();C=compute();renderActive(true);
-        toastUndo('Trading-212-CSV ergänzt ('+added+' neu, '+updated+' aktualisiert)',prev);
+        syncPlanTargets();save();C=compute();renderActive(true);
+        toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+added+' neu, '+updated+' aktualisiert)',prev);
         return;
       }
       const holdings=new Map();let tradeRows=0,latest='',hasCurrentValues=false;
@@ -1999,16 +2010,24 @@ function doTrading212Import(file){
         (open.length>12?'\n… und '+(open.length-12)+' weitere':'')+
         (hasCurrentValues?'\n\nAktueller Depotwert laut CSV: ':'\n\nDepotwert anhand der letzten Ausführungskurse (Schätzung): ')+eur.format(totalValue)+
         '\nUnrealisierter Gewinn/Verlust auf Basis der rekonstruierten Einstandskosten: '+eur.format(unrealized)+
-        '\n\nDer Import ersetzt die bisherigen Portfolio-Positionen, Buchungen und Wert-Snapshots. Budget und Rechner-Einstellungen bleiben erhalten. Fortfahren?';
+        '\n\nSparplan-Topf: '+planName+(existingPlan?' (wird aktualisiert)':' (wird neu angelegt)')+
+        '\nNur die Positionen und Buchungen dieses Sparplan-Topfs werden aktualisiert. Andere Töpfe bleiben erhalten. Fortfahren?';
       if(!confirm(msg))return;
-      const prev=JSON.stringify(state), colors=COLORS;
-      state.assets=open.map((h,i)=>({id:'t212_'+uid(),name:h.name,target:totalValue>0?(h.units*h.lastPrice/totalValue*100):0,planId:state.plans[0].id,planTarget:totalValue>0?(h.units*h.lastPrice/totalValue*100):100/open.length,color:colors[i%colors.length],fx:!!h.currency&&h.currency.toUpperCase()!=='EUR',ticker:h.ticker,isin:h.isin,units:h.units,lastPrice:h.lastPrice,currency:h.currency}));
-      state.deposits=open.map((h,i)=>({id:uid(),date:h.first||latest||todayISO(),assetId:state.assets[i].id,amount:Math.max(0,h.cost)})).filter(d=>d.amount>0);
-      const values={};state.assets.forEach((a,i)=>{values[a.id]=open[i].units*open[i].lastPrice;});
-      state.snapshots=[{date:latest||todayISO(),values}];
-      state.transfers=[];
-      save();C=compute();renderActive(true);
-      toastUndo(hasCurrentValues?'Trading-212-Portfolio mit aktuellen CSV-Werten importiert':'Trading-212-Portfolio importiert (Kurse geschätzt)',prev);
+      const prev=JSON.stringify(state), colors=COLORS, plan=t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id), oldIds=new Set(oldPlanAssets.map(a=>a.id)), values=Object.assign({},state.snapshots.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-1)[0]?.values||{}), newAssets=[];
+      oldPlanAssets.forEach(a=>{a.planId='';a.planTarget=0;values[a.id]=0;});
+      open.forEach((h,i)=>{
+        const key=(h.isin||h.ticker||h.name).trim().toUpperCase();
+        let a=oldPlanAssets.find(x=>(h.isin&&String(x.isin||'').toUpperCase()===h.isin.toUpperCase())||(h.ticker&&String(x.ticker||'').toUpperCase()===h.ticker.toUpperCase())||(!h.isin&&!h.ticker&&String(x.name||'').trim().toLowerCase()===h.name.trim().toLowerCase()));
+        if(!a){a={id:'t212_'+uid(),name:h.name,target:0,planId:plan.id,planTarget:0,color:colors[state.assets.length%colors.length],fx:false};state.assets.push(a);}
+        Object.assign(a,{name:h.name,planId:plan.id,ticker:h.ticker,isin:h.isin,units:h.units,lastPrice:h.lastPrice,currency:h.currency,fx:!!h.currency&&h.currency.toUpperCase()!=='EUR'});
+        newAssets.push(a);values[a.id]=h.units*h.lastPrice;
+      });
+      t212PlanWeight(newAssets,values);
+      state.deposits=state.deposits.filter(d=>!oldIds.has(d.assetId));
+      newAssets.forEach((a,i)=>{const h=open[i];if(h.cost>0)state.deposits.push({id:uid(),date:h.first||latest||todayISO(),assetId:a.id,amount:Math.max(0,h.cost)});});
+      state.snapshots.push({date:latest||todayISO(),values});
+      syncPlanTargets();save();C=compute();renderActive(true);
+      toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+newAssets.length+' Positionen)',prev);
     }catch(err){alert('Trading-212-Import fehlgeschlagen: '+err.message);}
   };
   fr.onerror=()=>alert('Die CSV-Datei konnte nicht gelesen werden.');
