@@ -1897,13 +1897,22 @@ function t212Date(v){
   if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
   const d=new Date(s);return Number.isFinite(d.getTime())?iso(d):todayISO();
 }
+function t212CurrentValue(row,exchange){
+  const keys=Object.keys(row), candidates=['currentvalue','marketvalue','positionvalue','portfoliovalue','value'];
+  const header=keys.find(x=>candidates.includes(t212Key(x)));
+  if(!header||String(row[header]||'').trim()==='')return null;
+  const raw=t212Number(row[header]);
+  const currency=String(t212Field(row,[k=>k==='currencyvalue',k=>k==='valuecurrency',k=>k==='currency'])).trim().toUpperCase();
+  return Math.abs(raw)*(currency&&currency!=='EUR'?(exchange||1):1);
+}
 function doTrading212Import(file){
   const fr=new FileReader();
   fr.onload=()=>{
     try{
-      const rows=parseTrading212CSV(fr.result);
-      const holdings=new Map();let tradeRows=0,latest='';
-      rows.forEach(r=>{
+      const rows=parseTrading212CSV(fr.result).map((r,i)=>({r,i,date:t212Date(t212Field(r,[k=>k==='time',k=>k==='date',k=>k==='timestamp']))})).sort((a,b)=>a.date.localeCompare(b.date)||a.i-b.i);
+      const holdings=new Map();let tradeRows=0,latest='',hasCurrentValues=false;
+      rows.forEach(item=>{
+        const r=item.r,date=item.date;
         const action=String(t212Field(r,[k=>k==='action',k=>k==='type'])).toLowerCase();
         const ticker=String(t212Field(r,[k=>k==='ticker',k=>k==='symbol'])).trim();
         const isin=String(t212Field(r,[k=>k==='isin'])).trim();
@@ -1912,24 +1921,30 @@ function doTrading212Import(file){
         const price=t212Number(t212Field(r,[k=>k==='priceshare',k=>k==='pricepershare',k=>k==='price']));
         const exchange=t212Number(t212Field(r,[k=>k==='exchangerate',k=>k==='fxrate']))||1;
         const transactionTotal=Math.abs(t212Number(t212Field(r,[k=>k==='total',k=>k==='amount'])));
-        const date=t212Date(t212Field(r,[k=>k==='time',k=>k==='date',k=>k==='timestamp']));
+        const currentValue=t212CurrentValue(r,exchange);
         const buy=/buy|kauf|purchase/.test(action),sell=/sell|verkauf/.test(action);
         if(!buy&&!sell)return;
         if(!(shares>0)||!(price>0)||(!ticker&&!isin&&!name))return;
         const key=(isin||ticker||name).toUpperCase();
         let h=holdings.get(key);
-        if(!h){h={name:name||ticker||isin,ticker,isin,units:0,cost:0,lastPrice:price*exchange,currency:String(t212Field(r,[k=>k.includes('currency')&&k.includes('price')])).trim(),first:date,last:date};holdings.set(key,h);}
+        if(!h){h={name:name||ticker||isin,ticker,isin,units:0,cost:0,lastPrice:price*exchange,currentValue:null,currency:String(t212Field(r,[k=>k.includes('currency')&&k.includes('price')])).trim(),first:date,last:date};holdings.set(key,h);}
         if(buy){h.cost+=transactionTotal||shares*price*exchange;h.units+=shares;}
         else if(sell&&h.units>0){const sold=Math.min(shares,h.units);h.cost-=h.cost*(sold/h.units);h.units-=sold;}
-        h.lastPrice=price*exchange;h.last=date;if(!latest||date>latest)latest=date;tradeRows++;
+        h.lastPrice=price*exchange;h.last=date;
+        if(currentValue!==null){h.currentValue=currentValue;h.currentValueDate=date;hasCurrentValues=true;}
+        if(!latest||date>latest)latest=date;tradeRows++;
       });
       const open=[...holdings.values()].filter(h=>h.units>1e-8);
       if(!open.length)throw new Error('Keine offenen Wertpapierbestände erkannt. Prüfe, ob die CSV ausgeführte Käufe und Verkäufe mit Spalten wie Ticker, No. of shares und Price / share enthält.');
+      open.forEach(h=>{if(h.currentValue!==null)h.lastPrice=h.currentValue/h.units;});
       const totalValue=open.reduce((sum,h)=>sum+h.units*h.lastPrice,0);
+      const totalCost=open.reduce((sum,h)=>sum+h.cost,0);
+      const unrealized=totalValue-totalCost;
       const summary=open.slice(0,12).map(h=>h.name+': '+new Intl.NumberFormat('de-DE',{maximumFractionDigits:6}).format(h.units)+' Stk.').join('\n');
       const msg='Trading-212-CSV erkannt: '+tradeRows+' Kauf-/Verkaufszeilen, '+open.length+' offene Positionen.\n\nBeispielbestände:\n'+summary+
         (open.length>12?'\n… und '+(open.length-12)+' weitere':'')+
-        '\n\nGeschätzter Depotwert anhand des jeweils letzten Ausführungskurses: '+eur.format(totalValue)+
+        (hasCurrentValues?'\n\nAktueller Depotwert laut CSV: ':'\n\nDepotwert anhand der letzten Ausführungskurse (Schätzung): ')+eur.format(totalValue)+
+        '\nUnrealisierter Gewinn/Verlust auf Basis der rekonstruierten Einstandskosten: '+eur.format(unrealized)+
         '\n\nDer Import ersetzt die bisherigen Portfolio-Positionen, Buchungen und Wert-Snapshots. Budget und Rechner-Einstellungen bleiben erhalten. Fortfahren?';
       if(!confirm(msg))return;
       const prev=JSON.stringify(state), colors=COLORS;
@@ -1939,7 +1954,7 @@ function doTrading212Import(file){
       state.snapshots=[{date:latest||todayISO(),values}];
       state.transfers=[];
       save();C=compute();renderActive(true);
-      toastUndo('Trading-212-Portfolio importiert (Kurse geschätzt)',prev);
+      toastUndo(hasCurrentValues?'Trading-212-Portfolio mit aktuellen CSV-Werten importiert':'Trading-212-Portfolio importiert (Kurse geschätzt)',prev);
     }catch(err){alert('Trading-212-Import fehlgeschlagen: '+err.message);}
   };
   fr.onerror=()=>alert('Die CSV-Datei konnte nicht gelesen werden.');
