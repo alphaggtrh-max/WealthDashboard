@@ -848,9 +848,11 @@ function sanitize(o){
     crashPct:numOr(c0.crashPct,D.crashPct,5,90), crashYear:Math.round(numOr(c0.crashYear,D.crashYear,1,40)),
     seed:Math.round(numOr(c0.seed,D.seed,1,2147483647))
   };
-  if(!Array.isArray(o.assets)||!o.assets.length) throw new Error('Keine Positionen gefunden');
+  if(!Array.isArray(o.assets)) throw new Error('Ungültige Positionsdaten');
   const legacy=(Number(o.v)||0)<3, OLDCOL={a1:'#2f6bff',a2:'#12b886',a3:'#f59f00',a4:'#7c5cff'};
-  const assets=o.assets.map((a,i)=>{
+  const demoNames=/^(core msci world|core msci em imi|alphabet|nu holdings)$/i;
+  const cleanAssets=o.assets.filter(a=>a&& !demoNames.test(String(a.name||'').trim()));
+  const assets=cleanAssets.map((a,i)=>{
     const id=String(a.id||uid()), def=DEFAULT_ASSETS.find(d=>d.id===id);
     let color=okColor(a.color)?a.color:COLORS[i%COLORS.length];
     let fx=a.fx===undefined?!!(def&&def.fx):!!a.fx;
