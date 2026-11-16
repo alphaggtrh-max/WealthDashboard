@@ -863,7 +863,7 @@ function sanitize(o){
       if(String(a.color).toLowerCase()===OLDCOL[id]) color=def.color;
       if(id==='a3'&&/alphabet/i.test(String(a.name))) fx=false;
     }
-    return {id:id,name:String(a.name||'Position'),target:isFinite(Number(a.target))?Number(a.target):0,color:color,fx:fx,ticker:String(a.ticker||''),isin:String(a.isin||''),units:Number.isFinite(Number(a.units))?Number(a.units):0,lastPrice:Number.isFinite(Number(a.lastPrice))?Number(a.lastPrice):0,currency:String(a.currency||'')};
+    return {id:id,name:String(a.name||'Position'),target:isFinite(Number(a.target))?Number(a.target):0,planId:String(a.planId||''),planTarget:Number.isFinite(Number(a.planTarget))?clamp(Number(a.planTarget),0,100):(isFinite(Number(a.target))?clamp(Number(a.target),0,100):0),color:color,fx:fx,ticker:String(a.ticker||''),isin:String(a.isin||''),units:Number.isFinite(Number(a.units))?Number(a.units):0,lastPrice:Number.isFinite(Number(a.lastPrice))?Number(a.lastPrice):0,currency:String(a.currency||'')};
   });
   const ids=new Set(assets.map(a=>a.id));
   let plans=Array.isArray(o.plans)?o.plans.filter(p=>p&&typeof p==='object').map((p,i)=>({id:String(p.id||('p'+(i+1))),name:String(p.name||('Sparplan '+(i+1))).slice(0,60),monthly:numOr(p.monthly,0,0,1e7)})):[];
