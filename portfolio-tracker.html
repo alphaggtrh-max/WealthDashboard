@@ -1899,14 +1899,16 @@ function t212StrictDate(v){
   const d=new Date(s);return Number.isFinite(d.getTime())?iso(d):'';
 }
 function t212SnapshotDate(rows,file){
-  const dates=rows.map(x=>t212StrictDate(t212Field(x.r,[k=>k==='time',k=>k==='date',k=>k==='timestamp',k=>k==='asofdate',k=>k==='snapshotdate']))).filter(Boolean).sort();
-  if(dates.length)return dates[dates.length-1];
+  // Für den Verlauf zählt der Zeitstempel der exportierten Datei, nicht das Importdatum.
+  if(file&&Number.isFinite(Number(file.lastModified))&&Number(file.lastModified)>0)return iso(new Date(Number(file.lastModified)));
   const fn=String(file&&file.name||'');
   let m=fn.match(/(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})/);
   if(m)return t212StrictDate(m[1]+'-'+m[2]+'-'+m[3]);
   m=fn.match(/(\d{1,2})[-_.](\d{1,2})[-_.](20\d{2})/);
   if(m)return t212StrictDate(m[1]+'.'+m[2]+'.'+m[3]);
-  const entered=prompt('In der CSV wurde kein Datum gefunden. Bitte das Datum des Depotstands eingeben (TT.MM.JJJJ):',new Date().toLocaleDateString('de-DE'));
+  const dates=rows.map(x=>t212StrictDate(t212Field(x.r,[k=>k==='asofdate',k=>k==='snapshotdate']))).filter(Boolean).sort();
+  if(dates.length)return dates[dates.length-1];
+  const entered=prompt('Das Dateidatum ist nicht verfügbar. Bitte das Erstellungsdatum des CSV-Exports eingeben (TT.MM.JJJJ):',new Date().toLocaleDateString('de-DE'));
   return t212StrictDate(entered);
 }
 function t212ValuesAt(date){
@@ -2051,7 +2053,7 @@ function doTrading212Import(file){
         '\n\nSparplan-Topf: '+planName+(existingPlan?' (wird aktualisiert)':' (wird neu angelegt)')+
         '\nNur die Positionen und Buchungen dieses Sparplan-Topfs werden aktualisiert. Andere Töpfe bleiben erhalten. Fortfahren?';
       if(!confirm(msg))return;
-      const prev=JSON.stringify(state), colors=COLORS, plan=t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id), oldIds=new Set(oldPlanAssets.map(a=>a.id)), values=t212ValuesAt(latest||todayISO()), newAssets=[], matchedIds=new Set();
+      const csvDate=t212SnapshotDate(rows,file)||latest||todayISO(), prev=JSON.stringify(state), colors=COLORS, plan=t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id), oldIds=new Set(oldPlanAssets.map(a=>a.id)), values=t212ValuesAt(csvDate), newAssets=[], matchedIds=new Set();
       oldPlanAssets.forEach(a=>{a.planId='';a.planTarget=0;values[a.id]=0;});
       open.forEach((h,i)=>{
         let a=t212MatchAsset(h,state.assets.filter(x=>!matchedIds.has(x.id)));
@@ -2063,7 +2065,7 @@ function doTrading212Import(file){
       t212PlanWeight(newAssets,values);
       state.deposits=state.deposits.filter(d=>!oldIds.has(d.assetId));
       newAssets.forEach((a,i)=>{const h=open[i];if(h.cost>0)state.deposits.push({id:uid(),date:h.first||latest||todayISO(),assetId:a.id,amount:Math.max(0,h.cost)});});
-      state.snapshots=state.snapshots.filter(x=>x.date!==(latest||todayISO()));state.snapshots.push({date:latest||todayISO(),values});
+      state.snapshots=state.snapshots.filter(x=>x.date!==csvDate);state.snapshots.push({date:csvDate,values});
       syncPlanTargets();save();C=compute();renderActive(true);recordCsvImport(file,planName,'Transaktionen',prev);
       toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+newAssets.length+' Positionen)',prev);
     }catch(err){alert('Trading-212-Import fehlgeschlagen: '+err.message);}
