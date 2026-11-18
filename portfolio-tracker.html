@@ -1902,7 +1902,7 @@ const CSVHKEY='wealth-csv-import-history-v1';
 function csvHistoryGet(){try{const x=JSON.parse(localStorage.getItem(CSVHKEY)||'[]');return Array.isArray(x)?x:[];}catch(e){return[];}}
 function csvHistorySave(x){try{localStorage.setItem(CSVHKEY,JSON.stringify(x));}catch(e){alert('Die CSV-Importhistorie konnte nicht gespeichert werden. Eventuell ist der lokale Speicher voll.');}}
 function recordCsvImport(file,planName,type,before){
- const h=csvHistoryGet();h.unshift({id:uid(),file:String(file&&file.name||'Trading 212.csv'),plan:planName,type:type,date:new Date().toISOString(),before:before,undone:false});csvHistorySave(h);renderCsvHistory();
+ const h=csvHistoryGet();h.unshift({id:uid(),file:String(file&&file.name||'Trading 212.csv'),plan:planName,type:type,date:new Date().toISOString(),before:before,undone:false});h.splice(10);csvHistorySave(h);renderCsvHistory();
 }
 function renderCsvHistory(){
  const el=$('#csvImportHistory');if(!el)return;const h=csvHistoryGet();
