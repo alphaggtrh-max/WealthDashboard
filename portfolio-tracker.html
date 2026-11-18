@@ -646,6 +646,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
         </table>
       </div>
     </div>
+    <div class="card" style="margin-top:14px"><h2>CSV-Importhistorie</h2><p class="hint">Jeder erfolgreiche CSV-Import wird hier gespeichert. Du kannst den Zustand vor einem Import wiederherstellen.</p><div id="csvImportHistory"></div></div>
   </section>
   <section class="view" id="v-budget">
     <div class="card">
@@ -1661,7 +1662,7 @@ function renderData(){
   const sum=targetSum(), info=$('#planInfo');
   if(Math.abs(sum-100)>0.01) info.innerHTML='<span class="warn">Die Soll-Verteilung ergibt '+pct(sum,1)+', nicht 100 %. Passe sie unten bei den Positionen an.</span>';
   else info.innerHTML='Deine Monatsrate verteilt sich auf die Spartöpfe: '+state.plans.map(p=>'<b>'+eur.format(Number(p.monthly)||0)+'</b> '+esc(p.name)).join(' · ')+(state.assets.some(a=>!a.planId)?' · Nicht zugeordnet: '+eur.format(state.assets.filter(a=>!a.planId).reduce((v,a)=>v+s.monthly*(Number(a.target)||0)/100,0)):'');
-  renderPlans();renderSnap(C); renderAssets(C); renderDeposits(C); renderTransfers();
+  renderPlans();renderSnap(C); renderAssets(C); renderDeposits(C); renderTransfers();renderCsvHistory();
 }
 
 /* ================= Monatsbudget ================= */
@@ -1897,6 +1898,25 @@ function t212CurrentValue(row,exchange){
   const currency=String(t212Field(row,[k=>k==='currencyvalue',k=>k==='valuecurrency',k=>k==='currency'])).trim().toUpperCase();
   return Math.abs(raw)*(currency&&currency!=='EUR'?(exchange||1):1);
 }
+const CSVHKEY='wealth-csv-import-history-v1';
+function csvHistoryGet(){try{const x=JSON.parse(localStorage.getItem(CSVHKEY)||'[]');return Array.isArray(x)?x:[];}catch(e){return[];}}
+function csvHistorySave(x){try{localStorage.setItem(CSVHKEY,JSON.stringify(x));}catch(e){alert('Die CSV-Importhistorie konnte nicht gespeichert werden. Eventuell ist der lokale Speicher voll.');}}
+function recordCsvImport(file,planName,type,before){
+ const h=csvHistoryGet();h.unshift({id:uid(),file:String(file&&file.name||'Trading 212.csv'),plan:planName,type:type,date:new Date().toISOString(),before:before,undone:false});csvHistorySave(h);renderCsvHistory();
+}
+function renderCsvHistory(){
+ const el=$('#csvImportHistory');if(!el)return;const h=csvHistoryGet();
+ if(!h.length){el.innerHTML='<p class="muted">Noch keine CSV-Importe vorhanden.</p>';return;}
+ el.innerHTML='<div class="tablewrap"><table><thead><tr><th>Datum</th><th>Datei</th><th>Sparplan-Topf</th><th>Importtyp</th><th>Status</th><th></th></tr></thead><tbody>'+h.map((x,i)=>'<tr><td>'+new Date(x.date).toLocaleString('de-DE')+'</td><td>'+esc(x.file)+'</td><td>'+esc(x.plan)+'</td><td>'+esc(x.type)+'</td><td>'+(x.undone?'<span class="muted">Rückgängig</span>':'Aktiv')+'</td><td class="r">'+(!x.undone?'<button type="button" class="danger" data-csv-undo="'+esc(x.id)+'">Import rückgängig</button>':'')+'</td></tr>').join('')+'</tbody></table></div>';
+}
+$('#csvImportHistory').addEventListener('click',e=>{
+ const b=e.target.closest('button[data-csv-undo]');if(!b)return;const h=csvHistoryGet(),idx=h.findIndex(x=>x.id===b.dataset.csvUndo);if(idx<0||h[idx].undone)return;
+ const later=h.slice(0,idx).filter(x=>!x.undone).length;
+ const msg='Den Zustand vor dem Import „'+h[idx].file+'“ wiederherstellen?'+(later?'\n\nAchtung: '+later+' spätere CSV-Importe werden dadurch ebenfalls zurückgesetzt.':'')+'\n\nAlle Änderungen am Depot seit diesem Import gehen dabei verloren. Das Monatsbudget bleibt erhalten.';
+ if(!confirm(msg))return;
+ try{state=sanitize(JSON.parse(h[idx].before));save();C=compute();h.slice(0,idx+1).forEach(x=>x.undone=true);csvHistorySave(h);renderActive(true);renderCsvHistory();toast('CSV-Import rückgängig gemacht');}
+ catch(err){alert('Import konnte nicht rückgängig gemacht werden: '+err.message);}
+});
 function t212PlanName(file){return String(file&&file.name||'Trading 212').replace(/\.[^.]+$/,'').trim().slice(0,60)||'Trading 212';}
 function t212GetPlan(name){let p=state.plans.find(x=>String(x.name||'').trim().toLowerCase()===name.trim().toLowerCase());if(!p){p={id:'plan_'+uid(),name:name,monthly:0};state.plans.push(p);}return p;}
 function t212PlanWeight(assets,values){const total=assets.reduce((sum,a)=>sum+Math.max(0,Number(values[a.id])||0),0);assets.forEach(a=>a.planTarget=total>0?Math.max(0,Number(values[a.id])||0)/total*100:100/assets.length);}
@@ -1959,7 +1979,7 @@ function doTrading212Import(file){
         t212PlanWeight(planAssets,mergedValues);
         const totalValue=state.assets.reduce((sum,a)=>sum+(mergedValues[a.id]||0),0);
         state.snapshots.push({date:snapshotDate,values:mergedValues});
-        syncPlanTargets();save();C=compute();renderActive(true);
+        syncPlanTargets();save();C=compute();renderActive(true);recordCsvImport(file,planName,'Portfolio-Snapshot',prev);
         toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+added+' neu, '+updated+' aktualisiert)',prev);
         return;
       }
@@ -2014,7 +2034,7 @@ function doTrading212Import(file){
       state.deposits=state.deposits.filter(d=>!oldIds.has(d.assetId));
       newAssets.forEach((a,i)=>{const h=open[i];if(h.cost>0)state.deposits.push({id:uid(),date:h.first||latest||todayISO(),assetId:a.id,amount:Math.max(0,h.cost)});});
       state.snapshots.push({date:latest||todayISO(),values});
-      syncPlanTargets();save();C=compute();renderActive(true);
+      syncPlanTargets();save();C=compute();renderActive(true);recordCsvImport(file,planName,'Transaktionen',prev);
       toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+newAssets.length+' Positionen)',prev);
     }catch(err){alert('Trading-212-Import fehlgeschlagen: '+err.message);}
   };
