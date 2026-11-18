@@ -1918,7 +1918,7 @@ $('#csvImportHistory').addEventListener('click',e=>{
  catch(err){alert('Import konnte nicht rückgängig gemacht werden: '+err.message);}
 });
 function t212PlanName(file){return String(file&&file.name||'Trading 212').replace(/\.[^.]+$/,'').trim().slice(0,60)||'Trading 212';}
-function t212FileKey(name){return String(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(20\d{2}[-_. ]?\d{1,2}[-_. ]?\d{1,2}|\d{1,2}[-_. ]\d{1,2}[-_. ]20\d{2})\b/g,' ').replace(/\b(copy|kopie|export|portfolio|snapshot|transactions?|trading\s*212|csv|\d+)\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim();}
+function t212FileKey(name){const raw=String(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(20\d{2}[-_. ]?\d{1,2}[-_. ]?\d{1,2}|\d{1,2}[-_. ]\d{1,2}[-_. ]20\d{2})\b/g,' ').replace(/\b(copy|kopie|export|portfolio|snapshot|transactions?|trading\s*212|csv|\d+)\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim();return raw||String(name||'').toLowerCase().replace(/\.[^.]+$/,'').replace(/\s*\(\d+\)$/,'').replace(/[^a-z0-9]+/g,' ').trim();}
 function t212Similarity(a,b){const x=t212FileKey(a),y=t212FileKey(b);if(!x||!y)return 0;if(x===y)return 1;const A=new Set(x.split(' ')),B=new Set(y.split(' '));let n=0;A.forEach(t=>{if(B.has(t))n++;});return n/Math.max(1,new Set([...A,...B]).size);}
 function t212FindPlan(name){return state.plans.find(p=>String(p.name||'').trim().toLowerCase()===name.trim().toLowerCase())||state.plans.map(p=>({p,score:t212Similarity(p.name,name)})).filter(x=>x.score>=0.72).sort((a,b)=>b.score-a.score)[0]?.p||null;}
 function t212GetPlan(name){let p=t212FindPlan(name);if(!p){p={id:'plan_'+uid(),name:name,monthly:0};state.plans.push(p);}return p;}
