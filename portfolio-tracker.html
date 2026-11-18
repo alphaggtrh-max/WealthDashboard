@@ -1899,16 +1899,19 @@ function t212StrictDate(v){
   const d=new Date(s);return Number.isFinite(d.getTime())?iso(d):'';
 }
 function t212SnapshotDate(rows,file){
-  // Für den Verlauf zählt der Zeitstempel der exportierten Datei, nicht das Importdatum.
-  if(file&&Number.isFinite(Number(file.lastModified))&&Number(file.lastModified)>0)return iso(new Date(Number(file.lastModified)));
+  // Das Exportdatum wird vorrangig aus dem Dateinamen gelesen.
   const fn=String(file&&file.name||'');
-  let m=fn.match(/(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})/);
-  if(m)return t212StrictDate(m[1]+'-'+m[2]+'-'+m[3]);
-  m=fn.match(/(\d{1,2})[-_.](\d{1,2})[-_.](20\d{2})/);
-  if(m)return t212StrictDate(m[1]+'.'+m[2]+'.'+m[3]);
-  const dates=rows.map(x=>t212StrictDate(t212Field(x.r,[k=>k==='asofdate',k=>k==='snapshotdate']))).filter(Boolean).sort();
+  const patterns=[
+    {re:/(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})/,make:m=>m[1]+'-'+m[2]+'-'+m[3]},
+    {re:/(\d{1,2})[-_.](\d{1,2})[-_.](20\d{2})/,make:m=>m[1]+'.'+m[2]+'.'+m[3]},
+    {re:/(20\d{2})(\d{2})(\d{2})/,make:m=>m[1]+'-'+m[2]+'-'+m[3]},
+    {re:/(\d{2})(\d{2})(20\d{2})/,make:m=>m[1]+'.'+m[2]+'.'+m[3]}
+  ];
+  for(const p of patterns){const m=fn.match(p.re);if(m){const d=t212StrictDate(p.make(m));if(d)return d;}}
+  // Falls der Dateiname kein Datum enthält, explizites Stichtagsfeld im CSV versuchen.
+  const dates=rows.map(x=>t212StrictDate(t212Field(x.r,[k=>k==='asofdate',k=>k==='snapshotdate',k=>k==='exportdate',k=>k==='creationdate']))).filter(Boolean).sort();
   if(dates.length)return dates[dates.length-1];
-  const entered=prompt('Das Dateidatum ist nicht verfügbar. Bitte das Erstellungsdatum des CSV-Exports eingeben (TT.MM.JJJJ):',new Date().toLocaleDateString('de-DE'));
+  const entered=prompt('Im Dateinamen wurde kein Datum erkannt. Bitte das Exportdatum aus dem Dateinamen eingeben (TT.MM.JJJJ):',new Date().toLocaleDateString('de-DE'));
   return t212StrictDate(entered);
 }
 function t212ValuesAt(date){
