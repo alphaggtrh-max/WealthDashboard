@@ -77,8 +77,9 @@ async def sync_now():
             "walletCurrency": wallet.get("currency") or summary.get("currency") or "EUR",
             "createdAt": p.get("createdAt")
         })
-    cash = float(summary.get("cash") or 0)
-    total = cash + sum(x["currentValue"] for x in normalized)
+    cash_data = summary.get("cash") or {}
+    cash = sum(float(cash_data.get(k) or 0) for k in ("availableToTrade", "inPies", "reservedForOrders"))
+    total = float(summary.get("totalValue") or (cash + sum(x["currentValue"] for x in normalized)))
     captured = datetime.now(timezone.utc).isoformat()
     with db() as con:
         con.execute("INSERT INTO snapshots(captured_at,account_currency,cash,positions_json,total_value) VALUES(?,?,?,?,?)",
