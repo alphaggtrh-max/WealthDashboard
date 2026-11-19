@@ -1726,34 +1726,42 @@ function t212BridgeUrl(){const v=($('#t212BridgeUrl')?.value||localStorage.getIt
 function t212SetInfo(msg,bad){const el=$('#t212Info');if(el)el.textContent=msg;const badge=$('#t212Status');if(badge){badge.textContent=bad?'Fehler':'Bereit';badge.className='badge'+(bad?' bad':'');}}
 async function t212Request(path,method){const base=t212BridgeUrl();localStorage.setItem(T212_URL_KEY,base);const r=await fetch(base+path,{method:method||'GET',headers:{'Accept':'application/json'}});let data={};try{data=await r.json();}catch(e){}if(!r.ok)throw new Error(data.detail||('HTTP '+r.status));return data;}
 async function t212Check(){try{const st=await t212Request('/api/status');if(!st.configured){t212SetInfo('Backend erreichbar, aber API Key/Secret fehlen in der .env-Datei auf dem Homeserver.',true);return;}t212SetInfo('Verbunden · '+(st.positionCount||0)+' Positionen · letzter Sync: '+(st.lastSync?new Date(st.lastSync).toLocaleString('de-DE'):'noch keiner')+' · Intervall '+Math.round(st.syncIntervalSeconds/60)+' Min.',false);}catch(e){t212SetInfo('Backend nicht erreichbar: '+e.message,true);}}
+function t212ApplyPortfolio(data,undo){
+ const positions=Array.isArray(data.positions)?data.positions:[],prev=JSON.stringify(state),used=new Set(),values={};
+ const plan=state.plans[0]||{id:'p1',name:'Sparplan 1',monthly:0};if(!state.plans.length)state.plans.push(plan);
+ state.assets.forEach(a=>{if(a.apiSynced)values[a.id]=0;});
+ positions.forEach(p=>{
+  const match=t212MatchAsset({name:p.name,ticker:p.ticker,isin:p.isin},state.assets.filter(a=>!used.has(a.id)));let a=match;
+  if(!a){a={id:'t212_'+String(p.isin||p.ticker||uid()).replace(/[^a-zA-Z0-9_-]/g,'_'),name:p.name||p.ticker||'Trading 212 Position',target:0,planId:plan.id,planTarget:0,color:COLORS[state.assets.length%COLORS.length],fx:false,ticker:'',isin:'',units:0,lastPrice:0,currency:'',apiSynced:true};if(state.assets.some(x=>x.id===a.id))a.id=uid();state.assets.push(a);}
+  used.add(a.id);a.name=p.name||a.name;a.ticker=p.ticker||a.ticker;a.isin=p.isin||a.isin;a.units=Number(p.quantity)||0;a.lastPrice=Number(p.currentPrice)||0;a.currency=p.currency||a.currency;a.fx=!!(a.currency&&data.accountCurrency&&a.currency!==data.accountCurrency);a.apiSynced=true;values[a.id]=Math.max(0,Number(p.currentValue)||0);
+ });
+ state.assets.forEach(a=>{if(!a.apiSynced&&!Object.prototype.hasOwnProperty.call(values,a.id)){const old=C&&C.last?C.last.values[a.id]:0;values[a.id]=Math.max(0,Number(old)||0);}});
+ const date=String(data.capturedAt||new Date().toISOString()).slice(0,10);state.snapshots=state.snapshots.filter(x=>x.date!==date);state.snapshots.push({date:date,values:values});
+ syncPlanTargets();save();C=compute();renderActive(true);
+ localStorage.setItem('wealth-t212-last-applied',String(data.capturedAt||''));
+ t212SetInfo('Erfolgreich synchronisiert · '+positions.length+' offene Positionen · Depotwert '+eur.format(Number(data.totalValue)||0)+' · '+new Date(data.capturedAt).toLocaleString('de-DE'),false);
+ if(undo)toastUndo('Trading-212-Portfolio synchronisiert',prev);
+}
 async function t212Sync(){
  const b=$('#t212Sync');if(b){b.disabled=true;b.textContent='Synchronisiere …';}
- try{
-  const data=await t212Request('/api/sync','POST'),positions=Array.isArray(data.positions)?data.positions:[];
-  if(!positions.length)throw new Error('Trading 212 hat keine offenen Positionen geliefert. Es wurden keine Depotdaten verändert.');
-  const prev=JSON.stringify(state),used=new Set(),values={};
-  const plan=state.plans[0]||{id:'p1',name:'Sparplan 1',monthly:0};
-  if(!state.plans.length)state.plans.push(plan);
-  state.assets.forEach(a=>{if(a.apiSynced)values[a.id]=0;});
-  positions.forEach((p,i)=>{
-   const match=t212MatchAsset({name:p.name,ticker:p.ticker,isin:p.isin},state.assets.filter(a=>!used.has(a.id)));
-   let a=match;
-   if(!a){a={id:'t212_'+String(p.isin||p.ticker||uid()).replace(/[^a-zA-Z0-9_-]/g,'_'),name:p.name||p.ticker||'Trading 212 Position',target:0,planId:plan.id,planTarget:0,color:COLORS[state.assets.length%COLORS.length],fx:false,ticker:'',isin:'',units:0,lastPrice:0,currency:'',apiSynced:true};if(state.assets.some(x=>x.id===a.id))a.id=uid();state.assets.push(a);}
-   used.add(a.id);a.name=p.name||a.name;a.ticker=p.ticker||a.ticker;a.isin=p.isin||a.isin;a.units=Number(p.quantity)||0;a.lastPrice=Number(p.currentPrice)||0;a.currency=p.currency||a.currency;a.fx=!!(a.currency&&data.accountCurrency&&a.currency!==data.accountCurrency);a.apiSynced=true;
-   values[a.id]=Math.max(0,Number(p.currentValue)||0);
-  });
-  state.assets.forEach(a=>{if(!a.apiSynced&&!Object.prototype.hasOwnProperty.call(values,a.id)){const old=C&&C.last?C.last.values[a.id]:0;values[a.id]=Math.max(0,Number(old)||0);}});
-  const date=todayISO();state.snapshots=state.snapshots.filter(x=>x.date!==date);state.snapshots.push({date:date,values:values});
-  syncPlanTargets();save();C=compute();renderActive(true);
-  t212SetInfo('Erfolgreich synchronisiert · '+positions.length+' offene Positionen · Depotwert '+eur.format(Number(data.totalValue)||0)+' · '+new Date(data.capturedAt).toLocaleString('de-DE'),false);
-  toastUndo('Trading-212-Portfolio synchronisiert',prev);
- }catch(e){t212SetInfo('Synchronisierung fehlgeschlagen: '+e.message,true);}
+ try{const data=await t212Request('/api/sync','POST');t212ApplyPortfolio(data,true);}
+ catch(e){t212SetInfo('Synchronisierung fehlgeschlagen: '+e.message,true);}
  finally{if(b){b.disabled=false;b.textContent='Jetzt synchronisieren';}}
+}
+async function t212AutoRefresh(){
+ try{
+  const st=await t212Request('/api/status');
+  if(!st.configured){t212SetInfo('Backend erreichbar, API-Zugangsdaten fehlen auf dem Homeserver.',true);return;}
+  if(st.lastSync&&st.lastSync!==localStorage.getItem('wealth-t212-last-applied')){
+   const data=await t212Request('/api/portfolio');t212ApplyPortfolio(data,false);
+  }else t212SetInfo('Verbunden · automatische Aktualisierung alle '+Math.round(st.syncIntervalSeconds/60)+' Minuten · letzter Sync: '+(st.lastSync?new Date(st.lastSync).toLocaleString('de-DE'):'noch keiner'),false);
+ }catch(e){t212SetInfo('Homeserver nicht erreichbar: '+e.message,true);}
 }
 $('#t212BridgeUrl').value=localStorage.getItem(T212_URL_KEY)||'http://192.168.178.148:8765';
 $('#t212BridgeUrl').addEventListener('change',()=>{localStorage.setItem(T212_URL_KEY,t212BridgeUrl());t212Check();});
 $('#t212Check').addEventListener('click',t212Check);
 $('#t212Sync').addEventListener('click',t212Sync);
+t212AutoRefresh();setInterval(t212AutoRefresh,60000);
 
 /* ================= Steuerung ================= */
 function renderActive(animate){
