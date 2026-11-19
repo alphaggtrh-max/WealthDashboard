@@ -1,0 +1,24 @@
+services:
+  trading212-bridge:
+    build: .
+    container_name: wealthdashboard-trading212
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-900}
+    ports:
+      - "8765:8000"
+    volumes:
+      - trading212-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  trading212-data:
