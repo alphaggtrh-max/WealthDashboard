@@ -2061,10 +2061,20 @@ function doTrading212Import(file,forcedPlanId){
           if(Math.abs(delta)>0.005)state.deposits.push({id:uid(),date:snapshotDate,assetId:asset.id,amount:delta});
           mergedValues[asset.id]=h.value;
         });
+        const planAssetIds=new Set([...oldPlanAssets.map(a=>a.id),...state.assets.filter(a=>a.planId===plan.id).map(a=>a.id)]);
         const planAssets=state.assets.filter(a=>a.planId===plan.id);
         t212PlanWeight(planAssets,mergedValues);
         removedAssets.forEach(a=>{delete mergedValues[a.id];state.deposits=state.deposits.filter(d=>d.assetId!==a.id);state.assets=state.assets.filter(x=>x.id!==a.id);});
-        const totalValue=state.assets.reduce((sum,a)=>sum+(mergedValues[a.id]||0),0);
+        // Keep this pot's imported values current in later portfolio snapshots too.
+        // Values and cash belonging to other savings pots are left untouched.
+        state.snapshots.forEach(s=>{
+          if(s.date<=snapshotDate)return;
+          if(!s.values||typeof s.values!=='object')s.values={};
+          planAssetIds.forEach(id=>{
+            if(Object.prototype.hasOwnProperty.call(mergedValues,id))s.values[id]=mergedValues[id];
+            else delete s.values[id];
+          });
+        });
         state.snapshots=state.snapshots.filter(x=>x.date!==snapshotDate);state.snapshots.push({date:snapshotDate,values:mergedValues,cash:Math.max(0,cashBefore+saleTotal)});
         t212CleanupEmptyPlans(plan.id);syncPlanTargets();save();C=compute();renderActive(true);recordCsvImport(file,planName,'Portfolio-Snapshot',prev);
         toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+added+' neu, '+updated+' aktualisiert)',prev);
