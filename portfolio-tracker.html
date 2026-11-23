@@ -1274,7 +1274,7 @@ function renderHero(c,animate){
   const gid='hs'+uid();
   const fd=t=>new Date(t).toLocaleDateString('de-DE',{day:'2-digit',month:'short',year:'2-digit'});
   el.className='spark'+(go?'':' static');
-  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="Verlauf von Depotwert und Einzahlungen">'+
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="Verlauf von Depotwert inklusive Cash und Einzahlungen">'+
     '<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+mainCol+'" stop-opacity=".34"/><stop offset="1" stop-color="'+mainCol+'" stop-opacity="0"/></linearGradient></defs>'+
     '<line class="grid" x1="0" x2="'+W+'" y1="'+(H-pb)+'" y2="'+(H-pb)+'"/>'+
     '<path class="sp-area" d="'+area+'" fill="url(#'+gid+')"/>'+
@@ -1282,7 +1282,7 @@ function renderHero(c,animate){
     '<path class="sp-line sp-main" d="'+dMain+'" stroke="'+mainCol+'"/>'+
     '<g class="sp-dot"><circle class="sp-ring" cx="'+X(last[0])+'" cy="'+Y(last[1])+'" r="6" fill="none" stroke="'+mainCol+'" stroke-width="1.6"/><circle cx="'+X(last[0])+'" cy="'+Y(last[1])+'" r="4.6" fill="'+mainCol+'" stroke="var(--card)" stroke-width="2.4"/></g>'+
     '<text class="ax" x="'+x0+'" y="'+(H-9)+'">'+fd(xmin)+'</text><text class="ax" x="'+x1+'" y="'+(H-9)+'" text-anchor="end">'+fd(xmax)+'</text>'+
-    '<g class="ax"><circle cx="'+(x0+4)+'" cy="18" r="4" fill="'+mainCol+'"/><text class="ax" x="'+(x0+14)+'" y="22">'+(val.length?'Depotwert':'Eingezahlt')+'</text>'+
+    '<g class="ax"><circle cx="'+(x0+4)+'" cy="18" r="4" fill="'+mainCol+'"/><text class="ax" x="'+(x0+14)+'" y="22">'+(val.length?'Depotwert inkl. Cash':'Eingezahlt')+'</text>'+
     (val.length?'<line x1="'+(x0+96)+'" x2="'+(x0+112)+'" y1="18" y2="18" stroke="'+PL.paid+'" stroke-width="1.6" stroke-dasharray="3 3"/><text class="ax" x="'+(x0+118)+'" y="22">Eingezahlt</text>':'')+'</g></svg>';
   if(go){
     const m=$('.sp-main',el), L=m.getTotalLength();
@@ -1334,19 +1334,19 @@ function renderHistory(animate){
   let cum=0; const paid=[];
   Array.from(byDate.keys()).sort().forEach(k=>{ cum+=byDate.get(k); paid.push([parseISO(k).getTime(),cum]); });
   if(paid.length){ paid.unshift([xmin,0]); paid.push([xmax,cum]); }
-  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Number(s.cash):0)]);
+  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Number(s.cash):(s===c.last?budgetCashBalance():0))]);
   const ticks=[]; for(let i=0;i<=4;i++) ticks.push(xmin+(xmax-xmin)*i/4);
   const short=(xmax-xmin)<120*864e5;
   drawChart(el,{
     series:[
       {name:'Eingezahlt',color:PL.paid,pts:paid,step:true},
-      {name:'Depotwert',color:PL.val,pts:val,area:true,dots:true}
+      {name:'Depotwert inkl. Cash',color:PL.val,pts:val,area:true,dots:true}
     ],
     xmin:xmin,xmax:xmax,xticks:ticks,
     xfmt:t=>new Date(t).toLocaleDateString('de-DE',short?{day:'2-digit',month:'2-digit'}:{month:'short',year:'2-digit'}),
     tipTitle:t=>new Date(t).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})
   },animate);
-  legend.innerHTML='<span><i style="border-color:'+PL.paid+'"></i>Eingezahlt</span><span><i style="border-color:'+PL.val+'"></i>Depotwert (deine Einträge)</span>';
+  legend.innerHTML='<span><i style="border-color:'+PL.paid+'"></i>Eingezahlt</span><span><i style="border-color:'+PL.val+'"></i>Depotwert inkl. Cash (deine Einträge)</span>';
 }
 function renderMilestones(c,animate){
   const p=calcModel(), basis=c.value!=null?c.value:(c.total>0?c.total:state.calc.start);
