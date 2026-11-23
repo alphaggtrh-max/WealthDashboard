@@ -1,28 +1,33 @@
 # WealthDashboard
 
-Lokaler Portfolio-Tracker als einzelne HTML-Datei, ohne Server und ohne Internet.
+A personal portfolio dashboard with a new portfolio-first interface.
 
-**Starten:** `portfolio-tracker.html` im Browser öffnen. Die Daten bleiben im Browser-Speicher (localStorage). Mit Export/Import im Menü (⋯ oben rechts) sicherst du sie als JSON. Tasten 1, 2, 3 wechseln die Bereiche.
+**Start:** Open `index.html` (the new default dashboard). The interface supports light and dark themes and reads the existing local browser data from `portfolio-tracker-v1`.
 
-## Funktionen
+## New dashboard
 
-**Übersicht**
-- Großer Depotwert mit animierter Verlaufskurve, darunter Eingezahlt, Gewinn und nächste Sparrate
-- Aufteilung (Donut mit Hover), Ist vs. Soll, Verlauf
-- Meilensteine mit Prognosedatum, Sparplan-Disziplin mit Nachtragen fälliger Raten
-- Rebalancing-Vorschlag: wohin die nächste Rate fließen sollte, ohne zu verkaufen
-- Gebühren-Überblick (z. B. 0,5 % FX-Gebühr bei Fremdwährungs-Positionen)
+- Portfolio overview with market value, invested capital, unrealized P/L and open positions
+- Portfolio history chart with selectable time ranges, using dated snapshots
+- Positions table with quantity, average buy-in, current price, market value and P/L
+- Transaction history for contributions and internal transfers
+- Allocation analytics by asset type, positions, region, sector, industry, country and currency (unavailable classifications are shown as unclassified rather than guessed)
+- Trading 212 read-only sync through the existing Homeserver bridge
+- JSON backup and restore
 
-**Rechner**
-- Prognose mit Inflation, Kosten, Ratensteigerung, Steuer und FX-Gebühr (nur für Positionen in Fremdwährung, z. B. Nu; Xetra-Positionen wie Alphabet bleiben gebührenfrei)
-- Zeitreise-Animation mit Meilenstein-Flaggen und Konfetti beim Ziel, Monte-Carlo-Simulation, Ziel-Rechner
-- Heatmap (Rate × Laufzeit) mit Wellen-Animation, Crash-Test
+## Existing workspace retained
 
-**Daten**
-- Sparplan, Buchungen, Depotwerte, Soll-Verteilung
+Open `portfolio-tracker.html` for the full compatibility workspace. It retains the established Trading 212 CSV importer and import history, dated CSV snapshots, savings pots, target allocations, rebalancing, contribution tracking, calculator, Monte Carlo simulation, goal calculator, crash test and monthly budget.
 
-**Sicherheit**
-- Rückgängig nach Löschen, Reset, Demo und Import
-- Backup-Erinnerung, wenn der letzte Export über 30 Tage her ist
+Both interfaces use the same local portfolio storage. CSV imports made in the classic workspace appear in the new dashboard after refreshing it.
 
-Keine Anlageberatung. Prognosen sind hypothetisch und vereinfacht.
+## Trading 212 bridge
+
+The new dashboard connects to the existing `trading212-bridge/` Docker/FastAPI service. API credentials remain on the Homeserver. The connection is read-only and cannot place trades or move money.
+
+## Data and privacy
+
+Portfolio data is stored in the browser's localStorage. Use Export JSON regularly to create a backup. Importing a backup replaces the current portfolio data in this browser.
+
+No live market-data provider is bundled into the dashboard; displayed prices and values come from imported snapshots or the connected Trading 212 bridge.
+
+This project is a personal tracking tool, not investment advice.
