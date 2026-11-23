@@ -2368,19 +2368,19 @@ $('#btnRepairSaleBasis').addEventListener('click',()=>{
   const sales=(state.cashAdjustments||[]).filter(x=>/sale/i.test(String(x.note||'')));
   const missing=sales.filter(x=>{
     const note=String(x.note||'');
-    const name=note.replace(/^sale of\\s+/i,'').trim();
+    const name=note.replace(/^sale of\s+/i,'').trim();
     return !(state.cashBasisAdjustments||[]).some(b=>b.date===x.date&&String(b.note||'')==='Invested basis retained from '+name);
   });
   if(!missing.length){toast('Für die erfassten Verkäufe fehlen keine Einstandswerte.');return;}
-  const list=missing.map((x,i)=>(i+1)+'. '+String(x.note||'Verkauf')+' · '+fmtDate(x.date)+' · Erlös '+eur.format(x.amount)).join('\\n');
-  const pick=prompt('Für welchen Verkauf möchtest du den ursprünglichen Einstandswert nachtragen?\\n\\n'+list+'\\n\\nNummer eingeben:', '1');
+  const list=missing.map((x,i)=>(i+1)+'. '+String(x.note||'Verkauf')+' · '+fmtDate(x.date)+' · Erlös '+eur.format(x.amount)).join('\n');
+  const pick=prompt('Für welchen Verkauf möchtest du den ursprünglichen Einstandswert nachtragen?\n\n'+list+'\n\nNummer eingeben:', '1');
   if(pick===null)return;
   const index=Number(pick)-1;if(!Number.isInteger(index)||index<0||index>=missing.length){alert('Bitte eine gültige Nummer eingeben.');return;}
-  const sale=missing[index],name=String(sale.note||'Verkauf').replace(/^sale of\\s+/i,'').trim();
-  const basisRaw=prompt('Wie viel hast du für „'+name+'“ insgesamt ursprünglich bezahlt (Einstandswert inkl. Gebühren)?\\nNicht den Verkaufserlös eingeben.',String(Math.max(0,Number(sale.amount)||0)).replace('.',','));
+  const sale=missing[index],name=String(sale.note||'Verkauf').replace(/^sale of\s+/i,'').trim();
+  const basisRaw=prompt('Wie viel hast du für „'+name+'“ insgesamt ursprünglich bezahlt (Einstandswert inkl. Gebühren)?\nNicht den Verkaufserlös eingeben.',String(Math.max(0,Number(sale.amount)||0)).replace('.',','));
   if(basisRaw===null)return;const basis=parseNum(basisRaw);
   if(!Number.isFinite(basis)||basis<0){alert('Bitte einen gültigen Einstandswert ab 0 € eingeben.');return;}
-  const contributionRaw=prompt('Wie viel davon kam ursprünglich als externe Einzahlung ins Portfolio?\\nWenn du die Position vollständig mit eingezahltem Geld gekauft hast und keine Cash-Umbuchung verwendet hast, entspricht der Betrag dem Einstandswert.',String(basis).replace('.',','));
+  const contributionRaw=prompt('Wie viel davon kam ursprünglich als externe Einzahlung ins Portfolio?\nWenn du die Position vollständig mit eingezahltem Geld gekauft hast und keine Cash-Umbuchung verwendet hast, entspricht der Betrag dem Einstandswert.',String(basis).replace('.',','));
   if(contributionRaw===null)return;const contribution=parseNum(contributionRaw);
   if(!Number.isFinite(contribution)||contribution<0||contribution>basis+0.005){alert('Die externe Einzahlung muss zwischen 0 € und dem Einstandswert liegen.');return;}
   state.cashBasisAdjustments=state.cashBasisAdjustments||[];
