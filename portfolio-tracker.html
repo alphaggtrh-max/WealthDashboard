@@ -827,7 +827,8 @@ function fresh(){
     plans:[{id:'p1',name:'Sparplan 1',monthly:900}],
     deposits:[],
     snapshots:[],
-    transfers:[]
+    transfers:[],
+    cashAdjustments:[]
   };
 }
 function sanitize(o){
@@ -875,11 +876,12 @@ function sanitize(o){
     .filter(s=>s&&isDate(s.date)&&s.values&&typeof s.values==='object')
     .map(s=>{
       const values={};
-      Object.keys(s.values).forEach(k=>{ if(ids.has(k)&&isFinite(Number(s.values[k]))) values[k]=Number(s.values[k]); });
-      return {date:s.date,values:values};
+      Object.keys(s.values).forEach(k=>{ if(isFinite(Number(s.values[k]))) values[k]=Number(s.values[k]); });
+      const out={date:s.date,values:values};if(Number.isFinite(Number(s.cash)))out.cash=Math.max(0,Number(s.cash));return out;
     });
   const transfers=(Array.isArray(o.transfers)?o.transfers:[]).filter(t=>t&&isDate(t.date)&&ids.has(t.assetId)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0).map(t=>({id:String(t.id||uid()),date:t.date,assetId:t.assetId,amount:Number(t.amount),note:String(t.note||'')}));
-  return {v:3,settings:st,calc:calc,assets:assets,plans:plans,deposits:deposits,snapshots:snapshots,transfers:transfers};
+  const cashAdjustments=(Array.isArray(o.cashAdjustments)?o.cashAdjustments:[]).filter(x=>x&&isDate(x.date)&&Number.isFinite(Number(x.amount))).map(x=>({id:String(x.id||uid()),date:x.date,amount:Number(x.amount),note:String(x.note||'Sale proceeds')}));
+  return {v:3,settings:st,calc:calc,assets:assets,plans:plans,deposits:deposits,snapshots:snapshots,transfers:transfers,cashAdjustments:cashAdjustments};
 }
 function load(){
   try{ const raw=localStorage.getItem(KEY); if(!raw) return null; return sanitize(JSON.parse(raw)); }
@@ -908,7 +910,7 @@ function compute(){
   const last=snaps.length?snaps[snaps.length-1]:null;
   let value=null, paidAtSnap=null; const valueBy={}, paidBySnap={};
   if(last){
-    value=0;
+    value=Number.isFinite(Number(last.cash))?Math.max(0,Number(last.cash)):budgetCashBalance();
     state.assets.forEach(a=>{ valueBy[a.id]=last.values[a.id]||0; value+=valueBy[a.id]; paidBySnap[a.id]=0; });
     deposits.forEach(d=>{ if(d.date<=last.date&&paidBySnap[d.assetId]!==undefined) paidBySnap[d.assetId]+=d.amount; });
     (state.transfers||[]).forEach(t=>{if(t.date<=last.date&&paidBySnap[t.assetId]!==undefined)paidBySnap[t.assetId]+=t.amount;});
@@ -1260,7 +1262,7 @@ function renderHero(c,animate){
   let cum=0; const paid=[[xmin,0]];
   Array.from(byDate.keys()).sort().forEach(k=>{ cum+=byDate.get(k); paid.push([parseISO(k).getTime(),cum]); });
   paid.push([xmax,cum]);
-  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),state.assets.reduce((t,a)=>t+(s.values[a.id]||0),0)]);
+  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Number(s.cash):0)]);
   let ymax=0; paid.concat(val).forEach(p=>{ if(p[1]>ymax) ymax=p[1]; });
   ymax=(ymax||1)*1.1;
   const X=t=>x0+(t-xmin)/(xmax-xmin)*(x1-x0), Y=v=>H-pb-(v/ymax)*(H-pt-pb);
@@ -1332,7 +1334,7 @@ function renderHistory(animate){
   let cum=0; const paid=[];
   Array.from(byDate.keys()).sort().forEach(k=>{ cum+=byDate.get(k); paid.push([parseISO(k).getTime(),cum]); });
   if(paid.length){ paid.unshift([xmin,0]); paid.push([xmax,cum]); }
-  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),state.assets.reduce((t,a)=>t+(s.values[a.id]||0),0)]);
+  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Number(s.cash):0)]);
   const ticks=[]; for(let i=0;i<=4;i++) ticks.push(xmin+(xmax-xmin)*i/4);
   const short=(xmax-xmin)<120*864e5;
   drawChart(el,{
@@ -1654,7 +1656,7 @@ function renderTransfers(){
   const rows=(state.transfers||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
   $('#transferBody').innerHTML=rows.length?rows.map(t=>{const a=state.assets.find(x=>x.id===t.assetId);return '<tr><td>'+fmtDate(t.date)+'</td><td>'+esc(a?a.name:'Unbekannte Position')+'</td><td>'+esc(t.note||'–')+'</td><td class="r">'+eur.format(t.amount)+'</td><td class="r"><button type="button" class="icon" data-transferdel="'+esc(t.id)+'" title="Umbuchung löschen">✕</button></td></tr>';}).join(''):'<tr><td colspan="5" class="muted">Noch keine Umbuchungen erfasst.</td></tr>';
 }
-function renderPlans(){const host=$('#plansEditor');host.innerHTML=state.plans.map(p=>{const aa=state.assets.filter(a=>a.planId===p.id),sum=aa.reduce((v,a)=>v+(Number(a.planTarget)||0),0),available=state.assets.filter(a=>a.planId!==p.id);return '<div class="card" style="margin:10px 0;padding:14px"><div class="row" style="align-items:end"><div><label>Topfname</label><input data-plan-name="'+esc(p.id)+'" value="'+esc(p.name)+'"></div><div><label>Monatliche Sparrate (€)</label><input data-plan-monthly="'+esc(p.id)+'" inputmode="decimal" value="'+fmtIn(p.monthly)+'"></div><div style="flex:0 0 auto"><button type="button" class="icon" data-plan-del="'+esc(p.id)+'" '+(state.plans.length===1?'disabled':'')+'>✕</button></div></div><p class="hint">Anteil an der gesamten Monatsrate: <b>'+pct(state.plans.reduce((v,x)=>v+(Number(x.monthly)||0),0)>0?(Number(p.monthly)||0)/state.plans.reduce((v,x)=>v+(Number(x.monthly)||0),0)*100:0,1)+'</b></p><details class="tax"><summary>Mehr Details – Positionen und Allokation im Topf</summary><div class="tablewrap"><table><thead><tr><th>Position</th><th>Allokation im Topf</th><th class="r">Monatlicher Betrag</th><th></th></tr></thead><tbody>'+(aa.length?aa.map(a=>'<tr><td>'+esc(a.name)+'</td><td><input class="inl num" data-plan-weight="'+esc(p.id)+'" data-asset="'+esc(a.id)+'" inputmode="decimal" value="'+fmtIn(a.planTarget)+'"> %</td><td class="r">'+eur.format((Number(p.monthly)||0)*(Number(a.planTarget)||0)/100)+'</td><td class="r"><button type="button" class="icon" data-plan-remove="'+esc(p.id)+'" data-asset="'+esc(a.id)+'" title="Position aus diesem Topf entfernen">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Positionen zugeordnet.</td></tr>')+'</tbody></table></div><div class="row" style="align-items:end;margin-top:10px"><div style="flex:1"><label>Position zu diesem Topf hinzufügen oder hierher verschieben</label><select data-plan-add-select="'+esc(p.id)+'"><option value="">Position auswählen …</option>'+available.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+(a.planId?' (aus anderem Topf)':' (nicht zugeordnet)')+'</option>').join('')+'</select></div><button type="button" data-plan-add="'+esc(p.id)+'" '+(!available.length?'disabled':'')+'>Position hinzufügen</button></div><p class="hint">'+aa.length+' Positionen · Allokation: <b class="'+(Math.abs(sum-100)>0.01?'warn':'')+'">'+pct(sum,1)+'</b> (muss 100 % ergeben)</p></div></details></div>';}).join('');const invalid=state.plans.filter(p=>p.monthly>0&&Math.abs(state.assets.filter(a=>a.planId===p.id).reduce((v,a)=>v+(Number(a.planTarget)||0),0)-100)>0.01);$('#plansInfo').innerHTML=invalid.length?'<span class="warn">Bitte die Allokation in '+invalid.map(p=>esc(p.name)).join(', ')+' auf 100 % setzen.</span>':'Alle aktiven Sparplan-Töpfe sind korrekt verteilt.';}
+function renderPlans(){const host=$('#plansEditor');host.innerHTML=state.plans.map(p=>{const aa=state.assets.filter(a=>a.planId===p.id),sum=aa.reduce((v,a)=>v+(Number(a.planTarget)||0),0),available=state.assets.filter(a=>a.planId!==p.id);return '<div class="card" style="margin:10px 0;padding:14px"><div class="row" style="align-items:end"><div><label>Topfname</label><input data-plan-name="'+esc(p.id)+'" value="'+esc(p.name)+'"></div><div><label>Monatliche Sparrate (€)</label><input data-plan-monthly="'+esc(p.id)+'" inputmode="decimal" value="'+fmtIn(p.monthly)+'"></div><div style="flex:0 0 auto"><button type="button" class="icon" data-plan-del="'+esc(p.id)+'" '+(state.plans.length===1?'disabled':'')+'>✕</button></div></div><p class="hint"><div class="formactions"><button type="button" data-plan-csv="'+esc(p.id)+'">CSV für diesen Sparplan-Topf importieren</button></div><p class="hint">Anteil an der gesamten Monatsrate: <b>'+pct(state.plans.reduce((v,x)=>v+(Number(x.monthly)||0),0)>0?(Number(p.monthly)||0)/state.plans.reduce((v,x)=>v+(Number(x.monthly)||0),0)*100:0,1)+'</b></p><details class="tax"><summary>Mehr Details – Positionen und Allokation im Topf</summary><div class="tablewrap"><table><thead><tr><th>Position</th><th>Allokation im Topf</th><th class="r">Monatlicher Betrag</th><th></th></tr></thead><tbody>'+(aa.length?aa.map(a=>'<tr><td>'+esc(a.name)+'</td><td><input class="inl num" data-plan-weight="'+esc(p.id)+'" data-asset="'+esc(a.id)+'" inputmode="decimal" value="'+fmtIn(a.planTarget)+'"> %</td><td class="r">'+eur.format((Number(p.monthly)||0)*(Number(a.planTarget)||0)/100)+'</td><td class="r"><button type="button" class="icon" data-plan-remove="'+esc(p.id)+'" data-asset="'+esc(a.id)+'" title="Position aus diesem Topf entfernen">✕</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">Noch keine Positionen zugeordnet.</td></tr>')+'</tbody></table></div><div class="row" style="align-items:end;margin-top:10px"><div style="flex:1"><label>Position zu diesem Topf hinzufügen oder hierher verschieben</label><select data-plan-add-select="'+esc(p.id)+'"><option value="">Position auswählen …</option>'+available.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+(a.planId?' (aus anderem Topf)':' (nicht zugeordnet)')+'</option>').join('')+'</select></div><button type="button" data-plan-add="'+esc(p.id)+'" '+(!available.length?'disabled':'')+'>Position hinzufügen</button></div><p class="hint">'+aa.length+' Positionen · Allokation: <b class="'+(Math.abs(sum-100)>0.01?'warn':'')+'">'+pct(sum,1)+'</b> (muss 100 % ergeben)</p></div></details></div>';}).join('');const invalid=state.plans.filter(p=>p.monthly>0&&Math.abs(state.assets.filter(a=>a.planId===p.id).reduce((v,a)=>v+(Number(a.planTarget)||0),0)-100)>0.01);$('#plansInfo').innerHTML=invalid.length?'<span class="warn">Bitte die Allokation in '+invalid.map(p=>esc(p.name)).join(', ')+' auf 100 % setzen.</span>':'Alle aktiven Sparplan-Töpfe sind korrekt verteilt.';}
 function renderData(){
   syncPlanTargets();
   const s=state.settings;
@@ -1676,7 +1678,7 @@ function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catc
 function isCashAllocation(z){return /^(cash|sparen|saving|savings)$/i.test(String(z.category||'').trim())||/(^|[^a-z])(cash|sparen|savings)([^a-z]|$)/i.test(String(z.name||''));}
 function budgetCashTotal(){return budgetData.incomes.reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0);}
 function cashTransferred(){return (state.transfers||[]).reduce((sum,t)=>sum+(Number(t.amount)||0),0);}
-function budgetCashBalance(){return Math.max(0,budgetCashTotal()-cashTransferred());}
+function budgetCashBalance(){return Math.max(0,budgetCashTotal()+((state.cashAdjustments||[]).reduce((sum,x)=>sum+(Number(x.amount)||0),0))-cashTransferred());}
 function renderBudget(){
   const monthIncomes=budgetData.incomes.filter(x=>x.month===budgetMonth),extra=monthIncomes.reduce((a,x)=>a+x.amount,0);
   const extraSpent=monthIncomes.reduce((a,x)=>a+(x.spent||[]).reduce((v,z)=>v+z.amount,0),0);
@@ -1998,13 +2000,16 @@ function t212CleanupEmptyPlans(keepId){const empty=state.plans.filter(p=>p.id!==
 function t212AssetNameKey(name){return String(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(ucits|etf|inc|corp|corporation|class|accumulating|acc|distributing|dist|ordinary|shares|share|adr|plc|ltd|sa|se)\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim();}
 function t212MatchAsset(h,candidates){const isin=String(h.isin||'').trim().toUpperCase(),ticker=String(h.ticker||'').trim().toUpperCase();if(isin){const a=candidates.find(x=>String(x.isin||'').trim().toUpperCase()===isin);if(a)return a;}if(ticker){const a=candidates.find(x=>String(x.ticker||'').trim().toUpperCase()===ticker);if(a)return a;}const key=t212AssetNameKey(h.name);if(!key)return null;const exact=candidates.find(x=>t212AssetNameKey(x.name)===key);if(exact)return exact;const tokens=key.split(' ').filter(Boolean),ranked=candidates.map(a=>{const other=t212AssetNameKey(a.name).split(' ').filter(Boolean),A=new Set(tokens),B=new Set(other);let overlap=0;A.forEach(t=>{if(B.has(t))overlap++;});return {a,score:overlap/Math.max(1,new Set([...A,...B]).size)};}).sort((a,b)=>b.score-a.score);return ranked.length&&ranked[0].score>=0.78&&(ranked.length===1||ranked[0].score-ranked[1].score>=0.08)?ranked[0].a:null;}
 function t212PlanWeight(assets,values){const total=assets.reduce((sum,a)=>sum+Math.max(0,Number(values[a.id])||0),0);assets.forEach(a=>a.planTarget=total>0?Math.max(0,Number(values[a.id])||0)/total*100:100/assets.length);}
-function doTrading212Import(file){
+function t212AskSaleProceeds(removed){const sales=[];for(const a of removed){const raw=prompt('Die Position „'+a.name+'“ fehlt im neuen CSV und wird aus dem Sparplan-Topf entfernt.\n\nWie hoch war der gesamte Verkaufserlös in EUR? (0, falls kein Erlös angefallen ist)', '0');if(raw===null)return null;const n=parseNum(raw);if(!Number.isFinite(n)||n<0){alert('Bitte einen gültigen Verkaufserlös ab 0 EUR eingeben.');return null;}sales.push({asset:a,amount:n});}return sales;}
+function t212CashAt(date){const prior=state.snapshots.filter(x=>x.date<=date).sort((a,b)=>a.date.localeCompare(b.date)).slice(-1)[0];return prior&&Number.isFinite(Number(prior.cash))?Number(prior.cash):budgetCashBalance();}
+function doTrading212Import(file,forcedPlanId){
   const fr=new FileReader();
   fr.onload=()=>{
     try{
       const rows=parseTrading212CSV(fr.result).map((r,i)=>({r,i,date:t212Date(t212Field(r,[k=>k==='time',k=>k==='date',k=>k==='timestamp']))})).sort((a,b)=>a.date.localeCompare(b.date)||a.i-b.i);
       const firstRow=rows.length?rows[0].r:{};
-      const planName=t212PlanName(file), existingPlan=t212FindPlan(planName);
+      const forcedPlan=forcedPlanId?state.plans.find(p=>p.id===forcedPlanId):null;
+      const planName=forcedPlan?forcedPlan.name:t212PlanName(file), existingPlan=forcedPlan||t212FindPlan(planName);
       const hasPortfolioSnapshot=['name','investedvalue','value','result','ownedquantity'].every(k=>Object.keys(firstRow).some(h=>t212Key(h)===k));
       if(hasPortfolioSnapshot){
         const snapshotDate=t212SnapshotDate(rows,file);if(!snapshotDate)throw new Error('Für diesen Portfolio-Export konnte kein gültiges Datum ermittelt werden.');const colors=COLORS, holdings=rows.map(item=>{
@@ -2040,7 +2045,8 @@ function doTrading212Import(file){
           '\n\nSparplan-Topf: '+planName+(existingPlan?' (wird aktualisiert)':' (wird neu angelegt)')+
           '\nDie CSV-Positionen werden diesem Topf zugeordnet. Andere Sparplan-Töpfe bleiben unverändert. Fortfahren?';
         if(!confirm(msg))return;
-        const prev=JSON.stringify(state), mergedValues=Object.assign({},existingValues), plan=t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id);
+        const prev=JSON.stringify(state), mergedValues=Object.assign({},existingValues), plan=forcedPlan||t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id), matchedPlanIds=new Set(planned.filter(x=>x.assetId).map(x=>x.assetId)), removedAssets=oldPlanAssets.filter(a=>!matchedPlanIds.has(a.id)), sales=t212AskSaleProceeds(removedAssets);
+        if(sales===null)return;const cashBefore=t212CashAt(snapshotDate),saleTotal=sales.reduce((sum,x)=>sum+x.amount,0);if(!Array.isArray(state.cashAdjustments))state.cashAdjustments=[];sales.forEach(x=>{if(x.amount>0)state.cashAdjustments.push({id:uid(),date:snapshotDate,amount:x.amount,note:'Sale of '+x.asset.name});});
         oldPlanAssets.forEach(a=>{a.planId='';a.planTarget=0;mergedValues[a.id]=0;});
         const matchedIds=new Set();
         holdings.forEach(h=>{
@@ -2057,8 +2063,9 @@ function doTrading212Import(file){
         });
         const planAssets=state.assets.filter(a=>a.planId===plan.id);
         t212PlanWeight(planAssets,mergedValues);
+        removedAssets.forEach(a=>{delete mergedValues[a.id];state.deposits=state.deposits.filter(d=>d.assetId!==a.id);state.assets=state.assets.filter(x=>x.id!==a.id);});
         const totalValue=state.assets.reduce((sum,a)=>sum+(mergedValues[a.id]||0),0);
-        state.snapshots=state.snapshots.filter(x=>x.date!==snapshotDate);state.snapshots.push({date:snapshotDate,values:mergedValues});
+        state.snapshots=state.snapshots.filter(x=>x.date!==snapshotDate);state.snapshots.push({date:snapshotDate,values:mergedValues,cash:Math.max(0,cashBefore+saleTotal)});
         t212CleanupEmptyPlans(plan.id);syncPlanTargets();save();C=compute();renderActive(true);recordCsvImport(file,planName,'Portfolio-Snapshot',prev);
         toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+added+' neu, '+updated+' aktualisiert)',prev);
         return;
@@ -2101,7 +2108,7 @@ function doTrading212Import(file){
         '\n\nSparplan-Topf: '+planName+(existingPlan?' (wird aktualisiert)':' (wird neu angelegt)')+
         '\nNur die Positionen und Buchungen dieses Sparplan-Topfs werden aktualisiert. Andere Töpfe bleiben erhalten. Fortfahren?';
       if(!confirm(msg))return;
-      const csvDate=t212SnapshotDate(rows,file)||latest||todayISO(), prev=JSON.stringify(state), colors=COLORS, plan=t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id), oldIds=new Set(oldPlanAssets.map(a=>a.id)), values=t212ValuesAt(csvDate), newAssets=[], matchedIds=new Set();
+      const csvDate=t212SnapshotDate(rows,file)||latest||todayISO(), prev=JSON.stringify(state), colors=COLORS, plan=forcedPlan||t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id), oldIds=new Set(oldPlanAssets.map(a=>a.id)), values=t212ValuesAt(csvDate), newAssets=[], matchedIds=new Set();
       oldPlanAssets.forEach(a=>{a.planId='';a.planTarget=0;values[a.id]=0;});
       open.forEach((h,i)=>{
         let a=t212MatchAsset(h,state.assets.filter(x=>!matchedIds.has(x.id)));
@@ -2110,10 +2117,12 @@ function doTrading212Import(file){
         Object.assign(a,{name:h.name,planId:plan.id,ticker:h.ticker,isin:h.isin,units:h.units,lastPrice:h.lastPrice,currency:h.currency,fx:!!h.currency&&h.currency.toUpperCase()!=='EUR'});
         newAssets.push(a);values[a.id]=h.units*h.lastPrice;
       });
+      const removedAssets=oldPlanAssets.filter(a=>!matchedIds.has(a.id)), sales=t212AskSaleProceeds(removedAssets);if(sales===null)return;const cashBefore=t212CashAt(csvDate),saleTotal=sales.reduce((sum,x)=>sum+x.amount,0);if(!Array.isArray(state.cashAdjustments))state.cashAdjustments=[];sales.forEach(x=>{if(x.amount>0)state.cashAdjustments.push({id:uid(),date:csvDate,amount:x.amount,note:'Sale of '+x.asset.name});});
       t212PlanWeight(newAssets,values);
       state.deposits=state.deposits.filter(d=>!oldIds.has(d.assetId));
       newAssets.forEach((a,i)=>{const h=open[i];if(h.cost>0)state.deposits.push({id:uid(),date:h.first||latest||todayISO(),assetId:a.id,amount:Math.max(0,h.cost)});});
-      state.snapshots=state.snapshots.filter(x=>x.date!==csvDate);state.snapshots.push({date:csvDate,values});
+      removedAssets.forEach(a=>{delete values[a.id];state.assets=state.assets.filter(x=>x.id!==a.id);});
+      state.snapshots=state.snapshots.filter(x=>x.date!==csvDate);state.snapshots.push({date:csvDate,values:values,cash:Math.max(0,cashBefore+saleTotal)});
       t212CleanupEmptyPlans(plan.id);syncPlanTargets();save();C=compute();renderActive(true);recordCsvImport(file,planName,'Transaktionen',prev);
       toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+newAssets.length+' Positionen)',prev);
     }catch(err){alert('Trading-212-Import fehlgeschlagen: '+err.message);}
@@ -2154,6 +2163,7 @@ $('#btnImport').addEventListener('click',()=>$('#fileImport').click());
 $('#fileImport').addEventListener('change',e=>{ if(e.target.files[0]) doImport(e.target.files[0]); e.target.value=''; });
 $('#btnCsvImport').addEventListener('click',()=>$('#fileTrading212').click());
 $('#fileTrading212').addEventListener('change',e=>{ if(e.target.files[0]) doTrading212Import(e.target.files[0]); e.target.value=''; });
+$('#plansEditor').addEventListener('click',e=>{const b=e.target.closest('[data-plan-csv]');if(!b)return;const p=state.plans.find(x=>x.id===b.dataset.planCsv);if(!p)return;const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.addEventListener('change',()=>{if(input.files[0])doTrading212Import(input.files[0],p.id);});input.click();});
 $('#btnReset').addEventListener('click',()=>{
   if(!confirm('Wirklich alle Daten löschen und neu starten?')) return;
   const prev=JSON.stringify(state);
