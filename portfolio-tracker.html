@@ -828,7 +828,8 @@ function fresh(){
     deposits:[],
     snapshots:[],
     transfers:[],
-    cashAdjustments:[]
+    cashAdjustments:[],
+    cashBasisAdjustments:[]
   };
 }
 function sanitize(o){
@@ -881,7 +882,8 @@ function sanitize(o){
     });
   const transfers=(Array.isArray(o.transfers)?o.transfers:[]).filter(t=>t&&isDate(t.date)&&ids.has(t.assetId)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0).map(t=>({id:String(t.id||uid()),date:t.date,assetId:t.assetId,amount:Number(t.amount),note:String(t.note||'')}));
   const cashAdjustments=(Array.isArray(o.cashAdjustments)?o.cashAdjustments:[]).filter(x=>x&&isDate(x.date)&&Number.isFinite(Number(x.amount))).map(x=>({id:String(x.id||uid()),date:x.date,amount:Number(x.amount),note:String(x.note||'Sale proceeds')}));
-  return {v:3,settings:st,calc:calc,assets:assets,plans:plans,deposits:deposits,snapshots:snapshots,transfers:transfers,cashAdjustments:cashAdjustments};
+  const cashBasisAdjustments=(Array.isArray(o.cashBasisAdjustments)?o.cashBasisAdjustments:[]).filter(x=>x&&isDate(x.date)).map(x=>({id:String(x.id||uid()),date:x.date,basis:Number.isFinite(Number(x.basis))?Number(x.basis):0,contribution:Number.isFinite(Number(x.contribution))?Number(x.contribution):0,note:String(x.note||'Sold position basis')}));
+  return {v:3,settings:st,calc:calc,assets:assets,plans:plans,deposits:deposits,snapshots:snapshots,transfers:transfers,cashAdjustments:cashAdjustments,cashBasisAdjustments:cashBasisAdjustments};
 }
 function load(){
   try{ const raw=localStorage.getItem(KEY); if(!raw) return null; return sanitize(JSON.parse(raw)); }
@@ -905,6 +907,8 @@ function compute(){
   let total=0;
   deposits.forEach(d=>{ if(paidBy[d.assetId]!==undefined){ paidBy[d.assetId]+=d.amount; total+=d.amount; } });
   (state.transfers||[]).forEach(t=>{if(paidBy[t.assetId]!==undefined)paidBy[t.assetId]+=t.amount;});
+  const cashBasis=state.cashBasisAdjustments||[];
+  total+=cashBasis.reduce((sum,x)=>sum+(Number(x.contribution)||0),0);
   total+=budgetCashTotal();
   const snaps=state.snapshots.slice().sort((a,b)=>a.date.localeCompare(b.date));
   const last=snaps.length?snaps[snaps.length-1]:null;
@@ -914,9 +918,9 @@ function compute(){
     state.assets.forEach(a=>{ valueBy[a.id]=last.values[a.id]||0; value+=valueBy[a.id]; paidBySnap[a.id]=0; });
     deposits.forEach(d=>{ if(d.date<=last.date&&paidBySnap[d.assetId]!==undefined) paidBySnap[d.assetId]+=d.amount; });
     (state.transfers||[]).forEach(t=>{if(t.date<=last.date&&paidBySnap[t.assetId]!==undefined)paidBySnap[t.assetId]+=t.amount;});
-    paidAtSnap=state.assets.reduce((s,a)=>s+paidBySnap[a.id],0);
+    paidAtSnap=state.assets.reduce((s,a)=>s+paidBySnap[a.id],0)+cashBasis.filter(x=>x.date<=last.date).reduce((sum,x)=>sum+(Number(x.basis)||0),0);
   }
-  return {deposits:deposits,paidBy:paidBy,total:total,cash:budgetCashBalance(),snaps:snaps,last:last,value:value,valueBy:valueBy,paidBySnap:paidBySnap,paidAtSnap:paidAtSnap};
+  return {deposits:deposits,paidBy:paidBy,total:total,cash:budgetCashBalance(),snaps:snaps,last:last,value:value,valueBy:valueBy,paidBySnap:paidBySnap,paidAtSnap:paidAtSnap,cashBasisAdjustments:cashBasis};
 }
 function syncPlanTargets(){if(!Array.isArray(state.plans)||!state.plans.length)state.plans=[{id:'p1',name:'Sparplan 1',monthly:state.settings.monthly}];const total=state.plans.reduce((sum,p)=>sum+Math.max(0,Number(p.monthly)||0),0);state.settings.monthly=total;state.assets.forEach(a=>{const p=state.plans.find(x=>x.id===a.planId);a.target=total>0&&p?(Math.max(0,Number(p.monthly)||0)/total)*(Number(a.planTarget)||0):0;});}
 function targetSum(){syncPlanTargets();return state.assets.reduce((s,a)=>s+a.target,0);}
@@ -1258,7 +1262,7 @@ function renderHero(c,animate){
   const W=Math.max(300,el.clientWidth||700), H=156, x0=28, x1=W-36, pt=40, pb=28, go=animate&&!REDUCED;
   let xmin=parseISO(all[0]).getTime(), xmax=Math.max(parseISO(all[all.length-1]).getTime(),noon().getTime());
   if(xmax-xmin<14*864e5) xmin=xmax-14*864e5;
-  const byDate=new Map(); c.deposits.forEach(d=>byDate.set(d.date,(byDate.get(d.date)||0)+d.amount));
+  const byDate=new Map(); c.deposits.forEach(d=>byDate.set(d.date,(byDate.get(d.date)||0)+d.amount)); (c.cashBasisAdjustments||[]).forEach(x=>{const amount=Number(x.contribution)||0;if(amount)byDate.set(x.date,(byDate.get(x.date)||0)+amount);});
   let cum=0; const paid=[[xmin,0]];
   Array.from(byDate.keys()).sort().forEach(k=>{ cum+=byDate.get(k); paid.push([parseISO(k).getTime(),cum]); });
   paid.push([xmax,cum]);
@@ -2047,7 +2051,7 @@ function doTrading212Import(file,forcedPlanId){
           '\nDie CSV-Positionen werden diesem Topf zugeordnet. Andere Sparplan-Töpfe bleiben unverändert. Fortfahren?';
         if(!confirm(msg))return;
         const prev=JSON.stringify(state), mergedValues=Object.assign({},existingValues), plan=forcedPlan||t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id), matchedPlanIds=new Set(planned.filter(x=>x.assetId).map(x=>x.assetId)), removedAssets=oldPlanAssets.filter(a=>!matchedPlanIds.has(a.id)), sales=t212AskSaleProceeds(removedAssets);
-        if(sales===null)return;const cashBefore=t212CashAt(snapshotDate),saleTotal=sales.reduce((sum,x)=>sum+x.amount,0);if(!Array.isArray(state.cashAdjustments))state.cashAdjustments=[];sales.forEach(x=>{if(x.amount>0)state.cashAdjustments.push({id:uid(),date:snapshotDate,amount:x.amount,note:'Sale of '+x.asset.name});});
+        if(sales===null)return;const cashBefore=t212CashAt(snapshotDate),saleTotal=sales.reduce((sum,x)=>sum+x.amount,0);if(!Array.isArray(state.cashAdjustments))state.cashAdjustments=[];if(!Array.isArray(state.cashBasisAdjustments))state.cashBasisAdjustments=[];sales.forEach(x=>{const deposits=state.deposits.filter(d=>d.assetId===x.asset.id&&d.date<=snapshotDate),transfers=(state.transfers||[]).filter(t=>t.assetId===x.asset.id&&t.date<=snapshotDate),contribution=deposits.reduce((sum,d)=>sum+(Number(d.amount)||0),0),basis=contribution+transfers.reduce((sum,t)=>sum+(Number(t.amount)||0),0);if(x.amount>0)state.cashAdjustments.push({id:uid(),date:snapshotDate,amount:x.amount,note:'Sale of '+x.asset.name});if(Math.abs(basis)>0.005)state.cashBasisAdjustments.push({id:uid(),date:snapshotDate,basis:basis,contribution:contribution,note:'Invested basis retained from '+x.asset.name});});
         oldPlanAssets.forEach(a=>{a.planId='';a.planTarget=0;mergedValues[a.id]=0;});
         const matchedIds=new Set();
         holdings.forEach(h=>{
