@@ -1269,7 +1269,7 @@ function renderHero(c,animate){
   let cum=0; const paid=[[xmin,0]];
   Array.from(byDate.keys()).sort().forEach(k=>{ cum+=byDate.get(k); paid.push([parseISO(k).getTime(),cum]); });
   paid.push([xmax,cum]);
-  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Number(s.cash):(s===c.last?budgetCashBalance():0))]);
+  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Math.max(0,Number(s.cash)):historicalCashAt(s.date))]);
   let ymax=0; paid.concat(val).forEach(p=>{ if(p[1]>ymax) ymax=p[1]; });
   ymax=(ymax||1)*1.1;
   const X=t=>x0+(t-xmin)/(xmax-xmin)*(x1-x0), Y=v=>H-pb-(v/ymax)*(H-pt-pb);
@@ -1335,14 +1335,18 @@ function renderHistory(animate){
     el.innerHTML='<div class="empty">Noch keine Daten. Buche deine erste Einzahlung oder lade die Demo.</div>';
     legend.innerHTML=''; return;
   }
-  const all=c.deposits.map(d=>d.date).concat(c.snaps.map(s=>s.date)).sort();
+  const all=c.deposits.map(d=>d.date).concat((c.cashBasisAdjustments||[]).map(x=>x.date),c.snaps.map(s=>s.date)).sort();
   let xmin=parseISO(all[0]).getTime(), xmax=Math.max(parseISO(all[all.length-1]).getTime(),noon().getTime());
   if(xmax-xmin<14*864e5) xmin=xmax-14*864e5;
-  const byDate=new Map(); c.deposits.forEach(d=>byDate.set(d.date,(byDate.get(d.date)||0)+d.amount));
-  let cum=0; const paid=[];
+  // Externe Einzahlungen bleiben auch nach einem Verkauf Teil der historischen Kapitalbasis.
+  const byDate=new Map();
+  c.deposits.forEach(d=>byDate.set(d.date,(byDate.get(d.date)||0)+d.amount));
+  (c.cashBasisAdjustments||[]).forEach(x=>{const amount=Number(x.contribution)||0;if(amount)byDate.set(x.date,(byDate.get(x.date)||0)+amount);});
+  let cum=0; const paid=[[xmin,0]];
   Array.from(byDate.keys()).sort().forEach(k=>{ cum+=byDate.get(k); paid.push([parseISO(k).getTime(),cum]); });
-  if(paid.length){ paid.unshift([xmin,0]); paid.push([xmax,cum]); }
-  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Number(s.cash):(s===c.last?budgetCashBalance():0))]);
+  paid.push([xmax,cum]);
+  // Cash wird je Snapshot-Datum berechnet; der heutige Cash-Stand darf nicht rückwirkend in alte Punkte einfließen.
+  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Math.max(0,Number(s.cash)):historicalCashAt(s.date))]);
   const ticks=[]; for(let i=0;i<=4;i++) ticks.push(xmin+(xmax-xmin)*i/4);
   const short=(xmax-xmin)<120*864e5;
   drawChart(el,{
@@ -1687,6 +1691,13 @@ function isCashAllocation(z){return /^(cash|sparen|saving|savings)$/i.test(Strin
 function budgetCashTotal(){return budgetData.incomes.reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0);}
 function cashTransferred(){return (state.transfers||[]).reduce((sum,t)=>sum+(Number(t.amount)||0),0);}
 function budgetCashBalance(){return Math.max(0,budgetCashTotal()+((state.cashAdjustments||[]).reduce((sum,x)=>sum+(Number(x.amount)||0),0))-cashTransferred());}
+function historicalCashAt(date){
+  const month=String(date||'').slice(0,7);
+  const allocations=(budgetData.incomes||[]).filter(x=>String(x.month||'')<=month).reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0);
+  const sales=(state.cashAdjustments||[]).filter(x=>x.date<=date).reduce((sum,x)=>sum+(Number(x.amount)||0),0);
+  const transfers=(state.transfers||[]).filter(x=>x.date<=date).reduce((sum,x)=>sum+(Number(x.amount)||0),0);
+  return Math.max(0,allocations+sales-transfers);
+}
 function renderBudget(){
   const monthIncomes=budgetData.incomes.filter(x=>x.month===budgetMonth),extra=monthIncomes.reduce((a,x)=>a+x.amount,0);
   const extraSpent=monthIncomes.reduce((a,x)=>a+(x.spent||[]).reduce((v,z)=>v+z.amount,0),0);
