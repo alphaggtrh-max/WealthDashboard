@@ -2132,6 +2132,15 @@ function doTrading212Import(file,forcedPlanId){
       state.deposits=state.deposits.filter(d=>!oldIds.has(d.assetId));
       newAssets.forEach((a,i)=>{const h=open[i];if(h.cost>0)state.deposits.push({id:uid(),date:h.first||latest||todayISO(),assetId:a.id,amount:Math.max(0,h.cost)});});
       removedAssets.forEach(a=>{delete values[a.id];state.assets=state.assets.filter(x=>x.id!==a.id);});
+      const affectedPlanIds=new Set([...oldPlanAssets.map(a=>a.id),...newAssets.map(a=>a.id)]);
+      state.snapshots.forEach(s=>{
+        if(s.date<=csvDate)return;
+        if(!s.values||typeof s.values!=='object')s.values={};
+        affectedPlanIds.forEach(id=>{
+          if(Object.prototype.hasOwnProperty.call(values,id))s.values[id]=values[id];
+          else delete s.values[id];
+        });
+      });
       state.snapshots=state.snapshots.filter(x=>x.date!==csvDate);state.snapshots.push({date:csvDate,values:values,cash:Math.max(0,cashBefore+saleTotal)});
       t212CleanupEmptyPlans(plan.id);syncPlanTargets();save();C=compute();renderActive(true);recordCsvImport(file,planName,'Transaktionen',prev);
       toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+newAssets.length+' Positionen)',prev);
