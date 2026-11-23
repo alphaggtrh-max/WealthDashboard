@@ -1292,12 +1292,13 @@ function renderHero(c,animate){
 }
 function assetChartColor(a){return /nu\s*holdings/i.test(String(a.name||''))?'#8b5cf6':a.color;}
 function allocationGroups(c,total){
- const groups=state.plans.map(p=>{const aa=state.assets.filter(a=>a.planId===p.id);return {id:p.id,name:p.name,assets:aa,color:aa[0]?.color||'#46c2b3',amount:aa.reduce((v,a)=>v+(c.paidBy[a.id]||0),0),soll:aa.reduce((v,a)=>v+(Number(a.target)||0),0)};});
- const loose=state.assets.filter(a=>!a.planId);if(loose.length)groups.push({id:'__loose',name:'Ohne Sparplan',assets:loose,color:loose[0]?.color||'#8b97a0',amount:loose.reduce((v,a)=>v+(c.paidBy[a.id]||0),0),soll:loose.reduce((v,a)=>v+(Number(a.target)||0),0)});
+ const assetValue=a=>c.last?(Number(c.valueBy[a.id])||0):(Number(c.paidBy[a.id])||0);
+ const groups=state.plans.map(p=>{const aa=state.assets.filter(a=>a.planId===p.id);return {id:p.id,name:p.name,assets:aa,color:aa[0]?.color||'#46c2b3',amount:aa.reduce((v,a)=>v+assetValue(a),0),soll:aa.reduce((v,a)=>v+(Number(a.target)||0),0)};});
+ const loose=state.assets.filter(a=>!a.planId);if(loose.length)groups.push({id:'__loose',name:'Ohne Sparplan',assets:loose,color:loose[0]?.color||'#8b97a0',amount:loose.reduce((v,a)=>v+assetValue(a),0),soll:loose.reduce((v,a)=>v+(Number(a.target)||0),0)});
  return groups.map(g=>Object.assign(g,{ist:total>0?g.amount/total*100:0}));
 }
 function renderDonut(c,animate){
- const wrap=$('#donut'),R=70,SW=24,CIRC=2*Math.PI*R,cash=c.cash||0,total=c.total+cash,go=animate&&!REDUCED;
+ const wrap=$('#donut'),R=70,SW=24,CIRC=2*Math.PI*R,cash=c.last&&Number.isFinite(Number(c.last.cash))?Math.max(0,Number(c.last.cash)):(c.last?0:(c.cash||0)),total=c.last?c.value:(c.total+cash),go=animate&&!REDUCED;
  const groups=allocationGroups(c,total),segs=groups.map((g,i)=>({a:{name:g.name,color:g.color},i,p:total>0?g.amount/total:0,amount:g.amount}));if(cash>0)segs.push({a:{name:'Cash',color:'#ec4899'},i:groups.length,p:cash/total,amount:cash});
  let off=0,n=0,svg='<svg viewBox="0 0 200 200" class="donutsvg'+(go?' spin':'')+'" role="img" aria-label="Portfolio-Aufteilung nach Sparplan-Töpfen">';
  segs.forEach(x=>{x.len=x.p*CIRC;x.off=off;off+=x.len;if(x.p<=0)return;const fin=Math.max(0,x.len-(segs.filter(z=>z.p>0).length>1?2:0));svg+='<circle class="seg" data-i="'+x.i+'" data-final="'+fin+'" cx="100" cy="100" r="'+R+'" fill="none" stroke="'+x.a.color+'" stroke-width="'+SW+'" stroke-dasharray="'+(go?0:fin)+' '+CIRC+'" stroke-dashoffset="'+(-x.off)+'" transform="rotate(-90 100 100)" style="transition-delay:'+(go?n++*90:0)+'ms"/>';});
@@ -1311,13 +1312,13 @@ function hlDonut(i){
  const wrap=$('#donut');if(!wrap||!C)return;
  $$('.seg',wrap).forEach(x=>{const on=i<0||Number(x.dataset.i)===i;x.style.opacity=on?1:.25;x.setAttribute('stroke-width',Number(x.dataset.i)===i?30:24);});
  $$('.dlegend li',wrap).forEach(x=>x.classList.toggle('hl',Number(x.dataset.i)===i));
- const l=$('#dcL',wrap),v=$('#dcV',wrap);if(!l||!v)return;const groups=allocationGroups(C,C.total+(C.cash||0));
- if(i<0){l.textContent='Portfolio gesamt';v.textContent=eur0.format(C.total+(C.cash||0));}
+ const l=$('#dcL',wrap),v=$('#dcV',wrap);if(!l||!v)return;const groups=allocationGroups(C,C.last?C.value:(C.total+(C.cash||0)));
+ if(i<0){l.textContent='Portfolio gesamt';v.textContent=eur0.format(C.last?C.value:(C.total+(C.cash||0)));}
  else if(i===groups.length){l.textContent='Cash';v.textContent=eur.format(C.cash||0);}
  else if(groups[i]){l.textContent=groups[i].name.length>16?groups[i].name.slice(0,15)+'…':groups[i].name;v.textContent=pct(groups[i].ist);}
 }
 function renderBars(c,animate){
- const wrap=$('#bars'),total=c.total,go=animate&&!REDUCED,rows=allocationGroups(c,total),max=Math.max(1,...rows.map(r=>Math.max(r.ist,r.soll)))*1.08;
+ const wrap=$('#bars'),total=c.last?c.value:c.total,go=animate&&!REDUCED,rows=allocationGroups(c,total),max=Math.max(1,...rows.map(r=>Math.max(r.ist,r.soll)))*1.08;
  wrap.innerHTML=rows.map(r=>{const d=r.ist-r.soll,w=r.ist/max*100;return '<div class="brow"><div class="hd"><span><i class="dot" style="background:'+r.color+'"></i>'+esc(r.name)+'</span><span class="muted">Ist <b style="color:var(--text)">'+pct(r.ist)+'</b> · Soll '+pct(r.soll,0)+(total>0?' · '+sgn(d)+pct(Math.abs(d)).replace(' %',' pp'):'')+'</span></div><div class="track"><div class="fill" data-w="'+w+'" style="background:'+r.color+';width:'+(go?0:w)+'%"></div><div class="mark" style="left:calc('+(r.soll/max*100)+'% - 1px)" title="Soll"></div></div></div>';}).join('')+'<details class="tax"><summary>Mehr Details – einzelne Positionen</summary><div style="display:grid;gap:10px;margin-top:10px">'+rows.map(g=>'<div><b>'+esc(g.name)+'</b>'+g.assets.map(a=>'<div class="muted small" style="display:flex;justify-content:space-between"><span>'+esc(a.name)+'</span><span>Ist '+pct(total>0?(c.paidBy[a.id]||0)/total*100:0)+' · Soll '+pct(a.target,1)+'</span></div>').join('')+'</div>').join('')+'</div></details><p class="hint">Die Allokation zeigt die Verteilung auf deine Sparplan-Töpfe. Der Strich zeigt den Soll-Anteil, der Balken den tatsächlich eingezahlten Anteil.</p>';
  if(go)rAF2(()=>{$$('.fill',wrap).forEach(f=>{f.style.width=f.dataset.w+'%';});});
 }
