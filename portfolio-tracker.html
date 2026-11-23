@@ -1269,7 +1269,14 @@ function renderHero(c,animate){
   let cum=0; const paid=[[xmin,0]];
   Array.from(byDate.keys()).sort().forEach(k=>{ cum+=byDate.get(k); paid.push([parseISO(k).getTime(),cum]); });
   paid.push([xmax,cum]);
-  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Math.max(0,Number(s.cash)):historicalCashAt(s.date))]);
+  const val=c.snaps.map(s=>{
+    const holdings=Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0);
+    // Cash nur aus dem Snapshot selbst verwenden. Fehlt es, darf der heutige Cash-Bestand
+    // ausschließlich beim neuesten Snapshot ergänzt werden; ältere Punkte bleiben bei 0.
+    const hasCash=typeof s.cash==='number'&&Number.isFinite(s.cash);
+    const cash=hasCash?Math.max(0,s.cash):(s===c.last?budgetCashBalance():0);
+    return [parseISO(s.date).getTime(),holdings+cash];
+  });
   let ymax=0; paid.concat(val).forEach(p=>{ if(p[1]>ymax) ymax=p[1]; });
   ymax=(ymax||1)*1.1;
   const X=t=>x0+(t-xmin)/(xmax-xmin)*(x1-x0), Y=v=>H-pb-(v/ymax)*(H-pt-pb);
@@ -1346,7 +1353,14 @@ function renderHistory(animate){
   Array.from(byDate.keys()).sort().forEach(k=>{ cum+=byDate.get(k); paid.push([parseISO(k).getTime(),cum]); });
   paid.push([xmax,cum]);
   // Cash wird je Snapshot-Datum berechnet; der heutige Cash-Stand darf nicht rückwirkend in alte Punkte einfließen.
-  const val=c.snaps.map(s=>[parseISO(s.date).getTime(),Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0)+(Number.isFinite(Number(s.cash))?Math.max(0,Number(s.cash)):historicalCashAt(s.date))]);
+  const val=c.snaps.map(s=>{
+    const holdings=Object.values(s.values||{}).reduce((t,v)=>t+(Number(v)||0),0);
+    // Cash nur aus dem Snapshot selbst verwenden. Fehlt es, darf der heutige Cash-Bestand
+    // ausschließlich beim neuesten Snapshot ergänzt werden; ältere Punkte bleiben bei 0.
+    const hasCash=typeof s.cash==='number'&&Number.isFinite(s.cash);
+    const cash=hasCash?Math.max(0,s.cash):(s===c.last?budgetCashBalance():0);
+    return [parseISO(s.date).getTime(),holdings+cash];
+  });
   const ticks=[]; for(let i=0;i<=4;i++) ticks.push(xmin+(xmax-xmin)*i/4);
   const short=(xmax-xmin)<120*864e5;
   drawChart(el,{
@@ -1691,13 +1705,6 @@ function isCashAllocation(z){return /^(cash|sparen|saving|savings)$/i.test(Strin
 function budgetCashTotal(){return budgetData.incomes.reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0);}
 function cashTransferred(){return (state.transfers||[]).reduce((sum,t)=>sum+(Number(t.amount)||0),0);}
 function budgetCashBalance(){return Math.max(0,budgetCashTotal()+((state.cashAdjustments||[]).reduce((sum,x)=>sum+(Number(x.amount)||0),0))-cashTransferred());}
-function historicalCashAt(date){
-  const month=String(date||'').slice(0,7);
-  const allocations=(budgetData.incomes||[]).filter(x=>String(x.month||'')<=month).reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0);
-  const sales=(state.cashAdjustments||[]).filter(x=>x.date<=date).reduce((sum,x)=>sum+(Number(x.amount)||0),0);
-  const transfers=(state.transfers||[]).filter(x=>x.date<=date).reduce((sum,x)=>sum+(Number(x.amount)||0),0);
-  return Math.max(0,allocations+sales-transfers);
-}
 function renderBudget(){
   const monthIncomes=budgetData.incomes.filter(x=>x.month===budgetMonth),extra=monthIncomes.reduce((a,x)=>a+x.amount,0);
   const extraSpent=monthIncomes.reduce((a,x)=>a+(x.spent||[]).reduce((v,z)=>v+z.amount,0),0);
