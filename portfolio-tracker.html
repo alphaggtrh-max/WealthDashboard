@@ -2344,12 +2344,12 @@ document.addEventListener('click',e=>{
     const raw=prompt('Verkauf von „'+a.name+'“\n\nWie hoch ist der gesamte Verkaufserlös in EUR?',String(C.valueBy[a.id]||0).replace('.',','));if(raw===null)return;
     const proceeds=parseNum(raw);if(!Number.isFinite(proceeds)||proceeds<0){alert('Bitte einen gültigen Verkaufserlös ab 0 EUR eingeben.');return;}
     const date=prompt('Buchungsdatum (JJJJ-MM-TT):',todayISO());if(date===null)return;if(!isDate(date)){alert('Bitte ein gültiges Datum im Format JJJJ-MM-TT eingeben.');return;}
-    const prev=JSON.stringify(state),deposits=state.deposits.filter(d=>d.assetId===a.id&&d.date<=date),transfers=(state.transfers||[]).filter(t=>t.assetId===a.id&&t.date<=date),contribution=deposits.reduce((sum,d)=>sum+(Number(d.amount)||0),0),basis=contribution+transfers.reduce((sum,t)=>sum+(Number(t.amount)||0),0);
+    const prev=JSON.stringify(state),cashBefore=t212CashAt(date),deposits=state.deposits.filter(d=>d.assetId===a.id&&d.date<=date),transfers=(state.transfers||[]).filter(t=>t.assetId===a.id&&t.date<=date),contribution=deposits.reduce((sum,d)=>sum+(Number(d.amount)||0),0),basis=contribution+transfers.reduce((sum,t)=>sum+(Number(t.amount)||0),0);
     if(proceeds>0){state.cashAdjustments.push({id:uid(),date,amount:proceeds,note:'Sale of '+a.name});}
     if(Math.abs(basis)>0.005){state.cashBasisAdjustments.push({id:uid(),date,basis,contribution,note:'Invested basis retained from '+a.name});}
     state.deposits=state.deposits.filter(d=>d.assetId!==a.id);state.assets=state.assets.filter(x=>x.id!==a.id);
-    state.snapshots.forEach(s=>{if(s.date<date)return;if(s.values&&Object.prototype.hasOwnProperty.call(s.values,a.id))delete s.values[a.id];if(s.date===date)s.cash=Math.max(0,t212CashAt(date)+proceeds);});
-    if(!state.snapshots.some(s=>s.date===date)){const latest=state.snapshots.filter(s=>s.date<date).sort((x,y)=>x.date.localeCompare(y.date)).slice(-1)[0];state.snapshots.push({date,values:latest?Object.assign({},latest.values):{},cash:Math.max(0,t212CashAt(date)+proceeds)});}
+    state.snapshots.forEach(s=>{if(s.date<date)return;if(s.values&&Object.prototype.hasOwnProperty.call(s.values,a.id))delete s.values[a.id];const base=Number.isFinite(Number(s.cash))?Number(s.cash):cashBefore;s.cash=Math.max(0,base+proceeds);});
+    if(!state.snapshots.some(s=>s.date===date)){const latest=state.snapshots.filter(s=>s.date<date).sort((x,y)=>x.date.localeCompare(y.date)).slice(-1)[0];state.snapshots.push({date,values:latest?Object.assign({},latest.values):{},cash:Math.max(0,cashBefore+proceeds)});}
     save();C=compute();renderActive(false);toastUndo('Position verkauft und in Cash umgewandelt',prev);return;
   }
   if(b.dataset.act==='delAsset'){
