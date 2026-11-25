@@ -883,7 +883,7 @@ function sanitize(o){
     });
   const transfers=(Array.isArray(o.transfers)?o.transfers:[]).filter(t=>t&&isDate(t.date)&&t.assetId&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0).map(t=>({id:String(t.id||uid()),date:t.date,assetId:String(t.assetId),amount:Number(t.amount),note:String(t.note||'')}));
   const cashAdjustments=(Array.isArray(o.cashAdjustments)?o.cashAdjustments:[]).filter(x=>x&&isDate(x.date)&&Number.isFinite(Number(x.amount))).map(x=>({id:String(x.id||uid()),date:x.date,amount:Number(x.amount),note:String(x.note||'Sale proceeds')}));
-  const cashBasisAdjustments=(Array.isArray(o.cashBasisAdjustments)?o.cashBasisAdjustments:[]).filter(x=>x&&isDate(x.date)).map(x=>({id:String(x.id||uid()),date:x.date,basis:Number.isFinite(Number(x.basis))?Number(x.basis):0,contribution:Number.isFinite(Number(x.contribution))?Number(x.contribution):0,note:String(x.note||'Sold position basis')}));
+  const cashBasisAdjustments=(Array.isArray(o.cashBasisAdjustments)?o.cashBasisAdjustments:[]).filter(x=>x&&isDate(x.date)).map(x=>({id:String(x.id||uid()),date:x.date,basis:Number.isFinite(Number(x.basis))?Number(x.basis):0,contribution:x.contribution!==undefined&&Number.isFinite(Number(x.contribution))?Number(x.contribution):(Number(x.basis)||0),note:String(x.note||'Sold position basis')}));
   return {v:3,settings:st,calc:calc,assets:assets,plans:plans,deposits:deposits,snapshots:snapshots,transfers:transfers,cashAdjustments:cashAdjustments,cashBasisAdjustments:cashBasisAdjustments};
 }
 function load(){
