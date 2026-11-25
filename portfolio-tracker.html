@@ -1863,7 +1863,8 @@ function renderActive(animate){
   if(view==='overview') renderOverview(animate);
   else if(view==='calc') renderCalc(animate);
   else if(view==='budget') renderBudget();
-  else renderData();
+  else if(view==='notebook') renderNotebook();
+  else if(view==='data') renderData();
 }
 let calcPending=0;
 function scheduleCalc(){
@@ -2524,7 +2525,7 @@ $('#nbRows').addEventListener('click',e=>{
  if(edit){const x=notebookEntries.find(z=>z.id===edit.dataset.nbEdit);if(!x)return;notebookEditId=x.id;$('#nbType').value=x.type;$('#nbDate').value=x.date;$('#nbTitle').value=x.title;$('#nbAmount').value=fmtIn(x.amount);$('#nbCategory').value=x.category||'';$('#nbNote').value=x.note||'';$('#nbFormTitle').textContent='Buchung bearbeiten';$('#nbSaveBtn').textContent='Änderungen speichern';$('#nbCancelEdit').hidden=false;$('#nbForm').scrollIntoView({behavior:'smooth',block:'center'});return;}
  if(del){const x=notebookEntries.find(z=>z.id===del.dataset.nbDel);if(!x||!confirm('Buchung „'+x.title+'“ wirklich löschen?'))return;notebookEntries=notebookEntries.filter(z=>z.id!==x.id);nbSave();renderNotebook();toast('Buchung gelöscht');}
 });
-$('#nbExportCsv').addEventListener('click',()=>{const cols=['Datum','Art','Bezeichnung','Kategorie','Betrag_EUR','Notiz'],rows=notebookEntries.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(x=>[x.date,x.type==='income'?'Einnahme':'Ausgabe',x.title,x.category,x.amount.toFixed(2).replace('.',','),x.note]);const csv='\\ufeff'+[cols,...rows].map(r=>r.map(nbCsvCell).join(';')).join('\\r\\n');nbDownload('finanz-notizbuch-'+todayISO()+'.csv',csv,'text/csv;charset=utf-8;');});
+$('#nbExportCsv').addEventListener('click',()=>{const cols=['Datum','Art','Bezeichnung','Kategorie','Betrag_EUR','Notiz'],rows=notebookEntries.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(x=>[x.date,x.type==='income'?'Einnahme':'Ausgabe',x.title,x.category,x.amount.toFixed(2).replace('.',','),x.note]);const csv='\ufeff'+[cols,...rows].map(r=>r.map(nbCsvCell).join(';')).join('\r\n');nbDownload('finanz-notizbuch-'+todayISO()+'.csv',csv,'text/csv;charset=utf-8;');});
 $('#nbExportJson').addEventListener('click',()=>nbDownload('finanz-notizbuch-'+todayISO()+'.json',JSON.stringify({version:1,exportedAt:new Date().toISOString(),entries:notebookEntries},null,2),'application/json'));
 
 /* ================= Start ================= */
