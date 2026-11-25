@@ -25,7 +25,20 @@ export default async function handler(req, res) {
         period: e.period || e.periodicity || null
       })).filter(e => Number.isFinite(e.amount) && e.amount > 0) };
     }));
-    return res.status(200).json({ provider: 'EOD Historical Data', fetchedAt: new Date().toISOString(), results });
+    const currencies = [...new Set(results.flatMap(x => x.events.map(e => e.currency).filter(c => c && c !== 'EUR')))];
+    const fx = { EUR: 1 };
+    await Promise.all(currencies.map(async currency => {
+      try {
+        const response = await fetch('https://api.frankfurter.app/latest?from=' + encodeURIComponent(currency) + '&to=EUR');
+        if (response.ok) { const data = await response.json(); if (Number.isFinite(Number(data.rates?.EUR))) fx[currency] = Number(data.rates.EUR); }
+      } catch (_) {}
+    }));
+    results.forEach(result => result.events.forEach(event => {
+      const rate = event.currency ? fx[event.currency] : null;
+      event.fxToEUR = rate ?? null;
+      event.amountEUR = rate == null ? null : event.amount * rate;
+    }));
+    return res.status(200).json({ provider: 'EOD Historical Data', fetchedAt: new Date().toISOString(), fxAsOf: new Date().toISOString().slice(0,10), results });
   } catch (error) {
     return res.status(502).json({ error: 'Dividend provider request failed: ' + String(error.message || error) });
   }
