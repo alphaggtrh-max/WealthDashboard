@@ -31,3 +31,13 @@ Portfolio data is stored in the browser's localStorage. Use Export JSON regularl
 No live market-data provider is bundled into the dashboard; displayed prices and values come from imported snapshots or the connected Trading 212 bridge.
 
 This project is a personal tracking tool, not investment advice.
+
+## Dividend forecast (Vercel deployment)
+
+The new dashboard includes a CSV-based dividend forecast at `#dividends`. It accepts a positions CSV with columns such as `Ticker` / `Symbol` and `No. of shares` / `Quantity`. Tickers are sent to the server-side `/api/dividends` function; provider credentials are never exposed to the browser.
+
+### Required configuration
+
+Deploy the repository as a Vercel Git project and add the environment variable `EODHD_API_TOKEN` in the Vercel project settings (Production and Preview as appropriate). The API uses EOD Historical Data's dividend history/corporate actions endpoint and Frankfurter reference FX rates to convert declared dividend amounts into EUR. Without this environment variable the endpoint returns a setup message and no live dividend data can be retrieved.
+
+The forecast sums announced distributions in the next 12 months. If no future distribution is announced, it estimates a 12-month amount from the latest historical distribution and its reported cadence (or inferred cadence). The dashboard labels such results as estimates. Net values are a configurable simple tax haircut (default 26.375%), not an individualized German tax calculation. FX uses current reference rates rather than payment-date exchange rates. Provider coverage and ticker mapping are not guaranteed for every exchange or ETF.
