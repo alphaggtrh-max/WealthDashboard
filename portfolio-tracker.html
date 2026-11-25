@@ -1763,7 +1763,7 @@ let budgetMonth=currentBudgetMonth();
 let budgetData={income:0,savings:0,leisure:0,other:0,expenses:[],incomes:[],assets:[]};
 try{const saved=JSON.parse(localStorage.getItem(BKEY)||'null');if(saved&&typeof saved==='object')budgetData=Object.assign(budgetData,saved);if(!Array.isArray(budgetData.expenses))budgetData.expenses=[];if(!Array.isArray(budgetData.incomes))budgetData.incomes=[];if(!Array.isArray(budgetData.assets))budgetData.assets=[];}catch(e){}
 function bNum(v){let x=String(v||'').trim().replace(/\s|€/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');else if(/^\d{1,3}(\.\d{3})+$/.test(x))x=x.replace(/\./g,'');const n=Number(x);return Number.isFinite(n)&&n>=0?n:0;}
-function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catch(e){}}
+function bSave(){try{localStorage.setItem(BKEY,JSON.stringify(budgetData));}catch(e){}if(typeof nbSyncBudget==='function')nbSyncBudget();}
 function isCashAllocation(z){return /^(cash|sparen|saving|savings)$/i.test(String(z.category||'').trim())||/(^|[^a-z])(cash|sparen|savings)([^a-z]|$)/i.test(String(z.name||''));}
 function budgetCashTotal(){return budgetData.incomes.reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0);}
 function cashTransferred(){return (state.transfers||[]).reduce((sum,t)=>sum+(Number(t.amount)||0),0);}
