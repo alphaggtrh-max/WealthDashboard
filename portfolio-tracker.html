@@ -339,6 +339,25 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
   #btnQuick span{display:none}
 }
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
+/* Finanz-Notizbuch */
+#v-notebook .formline{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:end}
+#v-notebook .formline>div{min-width:0}
+#v-notebook .formline label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+#v-notebook .formline input,#v-notebook .formline select{width:100%;min-width:0}
+#v-notebook .actions{flex-wrap:wrap}
+#v-notebook .stat .v{font-variant-numeric:tabular-nums}
+.nb-bars{display:grid;gap:11px;margin-top:14px}
+.nb-month{display:grid;grid-template-columns:52px 1fr;gap:9px;align-items:center;font-size:11px;color:var(--muted)}
+.nb-pair{display:grid;gap:4px}
+.nb-track{height:9px;border-radius:8px;background:var(--card2);overflow:hidden}
+.nb-track i{display:block;height:100%;border-radius:8px}
+.nb-income{background:var(--pos)}.nb-expense{background:var(--neg)}
+.nb-legend{display:flex;gap:15px;font-size:11px;color:var(--muted);margin-top:12px}
+.nb-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.nb-kind{font-size:11px;font-weight:650}.nb-kind.income{color:var(--pos)}.nb-kind.expense{color:var(--neg)}
+.nb-actions{display:flex;gap:5px;justify-content:flex-end}.nb-actions button{padding:4px 8px;font-size:11px}
+@media(max-width:650px){#v-notebook .formline{grid-template-columns:1fr}#v-notebook .cardhead{align-items:flex-start;flex-direction:column}#v-notebook .actions{width:100%}#v-notebook .actions input,#v-notebook .actions select{flex:1;min-width:0}}
+
 </style>
 </head>
 <body>
@@ -1736,24 +1755,6 @@ function renderData(){
   renderPlans();renderSnap(C); renderAssets(C); renderDeposits(C); renderTransfers();renderCsvHistory();
 }
 
-/* Finanz-Notizbuch */
-#v-notebook .formline{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:end}
-#v-notebook .formline>div{min-width:0}
-#v-notebook .formline label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
-#v-notebook .formline input,#v-notebook .formline select{width:100%;min-width:0}
-#v-notebook .actions{flex-wrap:wrap}
-#v-notebook .stat .v{font-variant-numeric:tabular-nums}
-.nb-bars{display:grid;gap:11px;margin-top:14px}
-.nb-month{display:grid;grid-template-columns:52px 1fr;gap:9px;align-items:center;font-size:11px;color:var(--muted)}
-.nb-pair{display:grid;gap:4px}
-.nb-track{height:9px;border-radius:8px;background:var(--card2);overflow:hidden}
-.nb-track i{display:block;height:100%;border-radius:8px}
-.nb-income{background:var(--pos)}.nb-expense{background:var(--neg)}
-.nb-legend{display:flex;gap:15px;font-size:11px;color:var(--muted);margin-top:12px}
-.nb-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
-.nb-kind{font-size:11px;font-weight:650}.nb-kind.income{color:var(--pos)}.nb-kind.expense{color:var(--neg)}
-.nb-actions{display:flex;gap:5px;justify-content:flex-end}.nb-actions button{padding:4px 8px;font-size:11px}
-@media(max-width:650px){#v-notebook .formline{grid-template-columns:1fr}#v-notebook .cardhead{align-items:flex-start;flex-direction:column}#v-notebook .actions{width:100%}#v-notebook .actions input,#v-notebook .actions select{flex:1;min-width:0}}
 
 /* ================= Monatsbudget ================= */
 const BKEY='wealth-budget-v1';
