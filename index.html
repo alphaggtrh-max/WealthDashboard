@@ -140,6 +140,8 @@ function nbSyncBudget(){
  const manual=notebookEntries.filter(x=>x.source!=='budget'),historical=notebookEntries.filter(x=>x.source==='budget'&&nbMonth(x.date)!==month),old=new Map(notebookEntries.filter(x=>x.source==='budget'&&nbMonth(x.date)===month).map(x=>[x.sourceKey,x])),next=[...manual,...historical,...[...wanted].map(([key,value])=>({...old.get(key),...value}))];
  if(JSON.stringify(next)!==JSON.stringify(notebookEntries)){notebookEntries=next;nbSave();}
 }
+window.addEventListener('storage',e=>{if(e.key==='wealth-budget-v1'){nbSyncBudget();if(page==='notebook')renderNotebook();}});
+window.addEventListener('focus',()=>{if(page==='notebook'){nbSyncBudget();renderNotebook();}});
 function nbDownload(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 function nbCsvCell(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
 function renderNotebook(){
