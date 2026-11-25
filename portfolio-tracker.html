@@ -358,6 +358,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
       <button type="button" data-view="calc" title="Rechner (Taste 2)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg><span>Rechner</span></button>
       <button type="button" data-view="data" title="Daten (Taste 3)"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span>Daten</span></button>
       <button type="button" data-view="budget" title="Budget (Taste 4)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><path d="M7 15h4"/></svg><span>Budget</span></button>
+      <button type="button" data-view="notebook" title="Finanz-Notizbuch (Taste 5)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h13a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z"/><path d="M8 8h8M8 12h8M8 16h5M4 7h2M4 12h2M4 17h2"/></svg><span>Notizbuch</span></button>
     </nav>
     <p class="sidefoot"><i></i>Läuft lokal im Browser.<br>Deine Daten verlassen dein Gerät nicht.</p>
   </aside>
@@ -718,6 +719,48 @@ footer{color:var(--muted);font-size:12.5px;margin-top:28px;padding-top:18px;bord
         <div class="stat"><div class="l">Noch nicht verplant</div><div class="v" id="bFree">–</div></div>
       </div>
       <p class="info" id="bSummary"></p>
+    </div>
+  </section>
+  <section class="view" id="v-notebook">
+    <div class="card" style="margin-bottom:14px">
+      <div class="cardhead"><div><h2>Finanz-Notizbuch</h2><p class="lead">Sondereinnahmen, einmalige Ausgaben und sonstige Geldbewegungen unabhängig von deinem Depot festhalten.</p></div><div class="actions"><button type="button" id="nbExportCsv">CSV exportieren</button><button type="button" id="nbExportJson">JSON exportieren</button></div></div>
+      <div class="stats" id="nbKpis">
+        <div class="stat"><div class="l">Einnahmen gesamt</div><div class="v" id="nbIncomeTotal">0,00 €</div></div>
+        <div class="stat"><div class="l">Ausgaben gesamt</div><div class="v" id="nbExpenseTotal">0,00 €</div></div>
+        <div class="stat"><div class="l">Saldo</div><div class="v" id="nbBalance">0,00 €</div></div>
+      </div>
+      <div class="stats" style="margin-top:10px">
+        <div class="stat"><div class="l">Einnahmen diesen Monat</div><div class="v" id="nbMonthIncome">0,00 €</div></div>
+        <div class="stat"><div class="l">Ausgaben diesen Monat</div><div class="v" id="nbMonthExpense">0,00 €</div></div>
+        <div class="stat"><div class="l">Buchungen</div><div class="v" id="nbCount">0</div></div>
+      </div>
+    </div>
+    <div class="grid2" style="align-items:start">
+      <div class="card">
+        <div class="cardhead"><h2 id="nbFormTitle">Neue Buchung</h2><button type="button" id="nbCancelEdit" hidden>Abbrechen</button></div>
+        <form id="nbForm">
+          <div class="formline">
+            <div><label for="nbType">Art</label><select id="nbType"><option value="income">Einnahme</option><option value="expense">Ausgabe</option></select></div>
+            <div><label for="nbDate">Datum</label><input id="nbDate" type="date" required></div>
+            <div><label for="nbTitle">Bezeichnung</label><input id="nbTitle" maxlength="80" placeholder="z. B. Steuererstattung, Reparatur" required></div>
+            <div><label for="nbAmount">Betrag (€)</label><input id="nbAmount" inputmode="decimal" placeholder="z. B. 250,00" required></div>
+            <div><label for="nbCategory">Kategorie</label><input id="nbCategory" maxlength="50" placeholder="z. B. Bonus, Auto, Gesundheit"></div>
+            <div><label for="nbNote">Notiz</label><input id="nbNote" maxlength="300" placeholder="Optionale Details"></div>
+          </div>
+          <div class="formactions"><button class="primary" type="submit" id="nbSaveBtn">Buchung speichern</button></div>
+          <p class="hint" id="nbStatus">Diese Einträge verändern weder dein Depot noch dessen Gewinn/Verlust.</p>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Monatsübersicht</h2>
+        <p class="lead">Einnahmen und Ausgaben der letzten sechs Monate.</p>
+        <div id="nbMonthlyChart"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="cardhead"><div><h2>Alle Buchungen</h2><p class="lead">Durchsuche, filtere und bearbeite deine Einträge.</p></div><div class="actions"><input id="nbMonthFilter" type="month" aria-label="Monat filtern"><select id="nbTypeFilter" aria-label="Art filtern"><option value="all">Alle Arten</option><option value="income">Einnahmen</option><option value="expense">Ausgaben</option></select><input id="nbSearch" placeholder="Suchen …" aria-label="Buchungen durchsuchen"></div></div>
+      <div class="tablewrap"><table><thead><tr><th>Datum</th><th>Art</th><th>Bezeichnung</th><th>Kategorie</th><th class="r">Betrag</th><th>Notiz</th><th></th></tr></thead><tbody id="nbRows"></tbody></table></div>
+      <p class="hint" id="nbEmpty">Noch keine Buchungen erfasst.</p>
     </div>
   </section>
   </main>
@@ -1693,6 +1736,25 @@ function renderData(){
   renderPlans();renderSnap(C); renderAssets(C); renderDeposits(C); renderTransfers();renderCsvHistory();
 }
 
+/* Finanz-Notizbuch */
+#v-notebook .formline{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:end}
+#v-notebook .formline>div{min-width:0}
+#v-notebook .formline label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+#v-notebook .formline input,#v-notebook .formline select{width:100%;min-width:0}
+#v-notebook .actions{flex-wrap:wrap}
+#v-notebook .stat .v{font-variant-numeric:tabular-nums}
+.nb-bars{display:grid;gap:11px;margin-top:14px}
+.nb-month{display:grid;grid-template-columns:52px 1fr;gap:9px;align-items:center;font-size:11px;color:var(--muted)}
+.nb-pair{display:grid;gap:4px}
+.nb-track{height:9px;border-radius:8px;background:var(--card2);overflow:hidden}
+.nb-track i{display:block;height:100%;border-radius:8px}
+.nb-income{background:var(--pos)}.nb-expense{background:var(--neg)}
+.nb-legend{display:flex;gap:15px;font-size:11px;color:var(--muted);margin-top:12px}
+.nb-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.nb-kind{font-size:11px;font-weight:650}.nb-kind.income{color:var(--pos)}.nb-kind.expense{color:var(--neg)}
+.nb-actions{display:flex;gap:5px;justify-content:flex-end}.nb-actions button{padding:4px 8px;font-size:11px}
+@media(max-width:650px){#v-notebook .formline{grid-template-columns:1fr}#v-notebook .cardhead{align-items:flex-start;flex-direction:column}#v-notebook .actions{width:100%}#v-notebook .actions input,#v-notebook .actions select{flex:1;min-width:0}}
+
 /* ================= Monatsbudget ================= */
 const BKEY='wealth-budget-v1';
 const currentBudgetMonth=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');};
@@ -1812,8 +1874,8 @@ function moveInd(){
   ind.style.width=b.offsetWidth+'px'; ind.style.height=b.offsetHeight+'px';
   ind.style.transform='translate('+b.offsetLeft+'px,'+b.offsetTop+'px)';
 }
-const ORDER=['overview','calc','data','budget'];
-const TITLES={overview:['Übersicht',()=>'Stand '+fmtDateObj(noon())],calc:['Rechner',()=>'Prognosen und Simulationen mit deinen Annahmen'],data:['Daten',()=>'Buchungen, Positionen und Soll-Verteilung'],budget:['Budget',()=>'Einkommen, Fixkosten und was für dich übrig bleibt']};
+const ORDER=['overview','calc','data','budget','notebook'];
+const TITLES={overview:['Übersicht',()=>'Stand '+fmtDateObj(noon())],calc:['Rechner',()=>'Prognosen und Simulationen mit deinen Annahmen'],data:['Daten',()=>'Buchungen, Positionen und Soll-Verteilung'],budget:['Budget',()=>'Einkommen, Fixkosten und was für dich übrig bleibt'],notebook:['Notizbuch',()=>'Sondereinnahmen, Ausgaben und persönliche Geldübersicht']};
 function showView(v,first){
   stopZ();
   const dir=ORDER.indexOf(v)>=ORDER.indexOf(view)?1:-1;
@@ -2420,12 +2482,56 @@ $('#donut').addEventListener('mouseleave',()=>hlDonut(-1));
 let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ moveInd(); progress(); if(C) renderActive(false); },180); });
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(moveInd);
 
+/* ================= Finanz-Notizbuch ================= */
+const NBKEY='wealth-notebook-v1';
+let notebookEntries=[];
+try{const raw=JSON.parse(localStorage.getItem(NBKEY)||'[]');notebookEntries=Array.isArray(raw)?raw:[];}catch(e){notebookEntries=[];}
+let notebookEditId=null;
+function nbSave(){try{localStorage.setItem(NBKEY,JSON.stringify(notebookEntries));}catch(e){alert('Das Notizbuch konnte nicht gespeichert werden. Eventuell ist der Browser-Speicher voll.');}}
+function nbMoney(v){return eur.format(Number(v)||0);}
+function nbMonth(d){return String(d||'').slice(0,7);}
+function nbDownload(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function nbCsvCell(v){return '"'+String(v??'').replace(/"/g,'""')+'"';}
+function nbRenderChart(){
+ const now=new Date(),months=[];for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));}
+ const sums=months.map(m=>({m,income:notebookEntries.filter(x=>x.type==='income'&&nbMonth(x.date)===m).reduce((n,x)=>n+x.amount,0),expense:notebookEntries.filter(x=>x.type==='expense'&&nbMonth(x.date)===m).reduce((n,x)=>n+x.amount,0)}));
+ const max=Math.max(1,...sums.flatMap(x=>[x.income,x.expense]));
+ $('#nbMonthlyChart').innerHTML='<div class="nb-bars">'+sums.map(x=>'<div class="nb-month"><span>'+x.m.slice(5)+'</span><div class="nb-pair"><div class="nb-track" title="Einnahmen: '+nbMoney(x.income)+'"><i class="nb-income" style="width:'+Math.max(0,x.income/max*100)+'%"></i></div><div class="nb-track" title="Ausgaben: '+nbMoney(x.expense)+'"><i class="nb-expense" style="width:'+Math.max(0,x.expense/max*100)+'%"></i></div></div></div>').join('')+'</div><div class="nb-legend"><span><i class="nb-income"></i>Einnahmen</span><span><i class="nb-expense"></i>Ausgaben</span></div>';
+}
+function renderNotebook(){
+ const totalIn=notebookEntries.filter(x=>x.type==='income').reduce((n,x)=>n+x.amount,0),totalOut=notebookEntries.filter(x=>x.type==='expense').reduce((n,x)=>n+x.amount,0),month=currentBudgetMonth(),mIn=notebookEntries.filter(x=>x.type==='income'&&nbMonth(x.date)===month).reduce((n,x)=>n+x.amount,0),mOut=notebookEntries.filter(x=>x.type==='expense'&&nbMonth(x.date)===month).reduce((n,x)=>n+x.amount,0);
+ $('#nbIncomeTotal').textContent=nbMoney(totalIn);$('#nbExpenseTotal').textContent=nbMoney(totalOut);$('#nbBalance').textContent=nbMoney(totalIn-totalOut);$('#nbBalance').className='v '+(totalIn-totalOut>=0?'pos':'neg');$('#nbMonthIncome').textContent=nbMoney(mIn);$('#nbMonthExpense').textContent=nbMoney(mOut);$('#nbCount').textContent=notebookEntries.length;
+ const monthFilter=$('#nbMonthFilter').value,typeFilter=$('#nbTypeFilter').value,query=$('#nbSearch').value.trim().toLowerCase();
+ const rows=notebookEntries.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.id).localeCompare(String(a.id))).filter(x=>(!monthFilter||nbMonth(x.date)===monthFilter)&&(typeFilter==='all'||x.type===typeFilter)&&(!query||[x.title,x.category,x.note].some(v=>String(v||'').toLowerCase().includes(query))));
+ $('#nbRows').innerHTML=rows.map(x=>'<tr><td>'+fmtDate(x.date)+'</td><td><span class="nb-kind '+x.type+'">'+(x.type==='income'?'Einnahme':'Ausgabe')+'</span></td><td>'+esc(x.title)+'</td><td>'+esc(x.category||'–')+'</td><td class="r '+(x.type==='income'?'pos':'neg')+'">'+(x.type==='income'?'+':'−')+nbMoney(x.amount)+'</td><td>'+esc(x.note||'–')+'</td><td><div class="nb-actions"><button type="button" data-nb-edit="'+esc(x.id)+'">Bearbeiten</button><button type="button" class="danger" data-nb-del="'+esc(x.id)+'">Löschen</button></div></td></tr>').join('');
+ $('#nbEmpty').hidden=rows.length>0;
+ nbRenderChart();
+}
+function nbResetForm(){notebookEditId=null;$('#nbForm').reset();$('#nbDate').value=todayISO();$('#nbFormTitle').textContent='Neue Buchung';$('#nbSaveBtn').textContent='Buchung speichern';$('#nbCancelEdit').hidden=true;}
+$('#nbDate').value=todayISO();
+$('#nbForm').addEventListener('submit',e=>{
+ e.preventDefault();const type=$('#nbType').value,date=$('#nbDate').value,title=$('#nbTitle').value.trim(),amount=parseNum($('#nbAmount').value),category=$('#nbCategory').value.trim(),note=$('#nbNote').value.trim();
+ if(!isDate(date)||!title||!(amount>0)||!Number.isFinite(amount)){alert('Bitte Datum, Bezeichnung und einen gültigen Betrag größer 0 eingeben.');return;}
+ const entry={id:notebookEditId||('nb_'+uid()),type,date,title:title.slice(0,80),amount:Math.round(amount*100)/100,category:category.slice(0,50),note:note.slice(0,300)};
+ if(notebookEditId){notebookEntries=notebookEntries.map(x=>x.id===notebookEditId?entry:x);}else notebookEntries.push(entry);
+ nbSave();nbResetForm();renderNotebook();toast(notebookEditId?'Buchung aktualisiert':'Buchung gespeichert');
+});
+$('#nbCancelEdit').addEventListener('click',nbResetForm);
+['nbMonthFilter','nbTypeFilter','nbSearch'].forEach(id=>$('#'+id).addEventListener(id==='nbSearch'?'input':'change',renderNotebook));
+$('#nbRows').addEventListener('click',e=>{
+ const edit=e.target.closest('[data-nb-edit]'),del=e.target.closest('[data-nb-del]');
+ if(edit){const x=notebookEntries.find(z=>z.id===edit.dataset.nbEdit);if(!x)return;notebookEditId=x.id;$('#nbType').value=x.type;$('#nbDate').value=x.date;$('#nbTitle').value=x.title;$('#nbAmount').value=fmtIn(x.amount);$('#nbCategory').value=x.category||'';$('#nbNote').value=x.note||'';$('#nbFormTitle').textContent='Buchung bearbeiten';$('#nbSaveBtn').textContent='Änderungen speichern';$('#nbCancelEdit').hidden=false;$('#nbForm').scrollIntoView({behavior:'smooth',block:'center'});return;}
+ if(del){const x=notebookEntries.find(z=>z.id===del.dataset.nbDel);if(!x||!confirm('Buchung „'+x.title+'“ wirklich löschen?'))return;notebookEntries=notebookEntries.filter(z=>z.id!==x.id);nbSave();renderNotebook();toast('Buchung gelöscht');}
+});
+$('#nbExportCsv').addEventListener('click',()=>{const cols=['Datum','Art','Bezeichnung','Kategorie','Betrag_EUR','Notiz'],rows=notebookEntries.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(x=>[x.date,x.type==='income'?'Einnahme':'Ausgabe',x.title,x.category,x.amount.toFixed(2).replace('.',','),x.note]);const csv='\\ufeff'+[cols,...rows].map(r=>r.map(nbCsvCell).join(';')).join('\\r\\n');nbDownload('finanz-notizbuch-'+todayISO()+'.csv',csv,'text/csv;charset=utf-8;');});
+$('#nbExportJson').addEventListener('click',()=>nbDownload('finanz-notizbuch-'+todayISO()+'.json',JSON.stringify({version:1,exportedAt:new Date().toISOString(),entries:notebookEntries},null,2),'application/json'));
+
 /* ================= Start ================= */
 $('#bookDate').value=todayISO(); $('#singleDate').value=todayISO(); $('#snapDate').value=todayISO(); $('#transferDate').value=todayISO();
 $('#bookAmount').value=fmtIn(state.settings.monthly);
 (function(){
   const h=(location.hash||'').replace('#','');
-  showView(['overview','calc','data','budget'].indexOf(h)>=0?h:'overview',true);
+  showView(['overview','calc','data','budget','notebook'].indexOf(h)>=0?h:'overview',true);
 })();
 })();
 </script>
