@@ -2491,6 +2491,18 @@ try{const raw=JSON.parse(localStorage.getItem(NBKEY)||'[]');notebookEntries=Arra
 let notebookEditId=null;
 function nbSave(){try{localStorage.setItem(NBKEY,JSON.stringify(notebookEntries));}catch(e){alert('Das Notizbuch konnte nicht gespeichert werden. Eventuell ist der Browser-Speicher voll.');}}
 function nbMoney(v){return eur.format(Number(v)||0);}
+function nbSyncBudget(){
+ const month=currentBudgetMonth(),date=month+'-01',wanted=new Map();
+ const income=Number(budgetData.income)||0;
+ if(income>0)wanted.set('budget-income:'+month,{id:'nb_budget_income_'+month,source:'budget',sourceKey:'budget-income:'+month,type:'income',date,title:'Monatliches Nettoeinkommen',amount:Math.round(income*100)/100,category:'Nettoeinkommen',note:'Automatisch aus dem Monatsbudget übernommen'});
+ (budgetData.expenses||[]).forEach(x=>{const amount=Number(x.amount)||0;if(amount>0)wanted.set('budget-expense:'+x.id+':'+month,{id:'nb_budget_expense_'+String(x.id)+'_'+month,source:'budget',sourceKey:'budget-expense:'+x.id+':'+month,type:'expense',date,title:String(x.name||'Fixkosten'),amount:Math.round(amount*100)/100,category:String(x.category||'Fixkosten'),note:'Automatisch aus den monatlichen Fixkosten übernommen'});});
+ const generated=notebookEntries.filter(x=>x.source==='budget');
+ const manual=notebookEntries.filter(x=>x.source!=='budget');
+ const oldByKey=new Map(generated.map(x=>[x.sourceKey,x]));
+ const next=[...manual,...[...wanted].map(([key,value])=>({...oldByKey.get(key),...value}))];
+ const changed=JSON.stringify(next)!==JSON.stringify(notebookEntries);
+ if(changed){notebookEntries=next;nbSave();}
+}
 function nbMonth(d){return String(d||'').slice(0,7);}
 function nbDownload(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function nbCsvCell(v){return '"'+String(v??'').replace(/"/g,'""')+'"';}
@@ -2505,7 +2517,7 @@ function renderNotebook(){
  $('#nbIncomeTotal').textContent=nbMoney(totalIn);$('#nbExpenseTotal').textContent=nbMoney(totalOut);$('#nbBalance').textContent=nbMoney(totalIn-totalOut);$('#nbBalance').className='v '+(totalIn-totalOut>=0?'pos':'neg');$('#nbMonthIncome').textContent=nbMoney(mIn);$('#nbMonthExpense').textContent=nbMoney(mOut);$('#nbCount').textContent=notebookEntries.length;
  const monthFilter=$('#nbMonthFilter').value,typeFilter=$('#nbTypeFilter').value,query=$('#nbSearch').value.trim().toLowerCase();
  const rows=notebookEntries.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.id).localeCompare(String(a.id))).filter(x=>(!monthFilter||nbMonth(x.date)===monthFilter)&&(typeFilter==='all'||x.type===typeFilter)&&(!query||[x.title,x.category,x.note].some(v=>String(v||'').toLowerCase().includes(query))));
- $('#nbRows').innerHTML=rows.map(x=>'<tr><td>'+fmtDate(x.date)+'</td><td><span class="nb-kind '+x.type+'">'+(x.type==='income'?'Einnahme':'Ausgabe')+'</span></td><td>'+esc(x.title)+'</td><td>'+esc(x.category||'–')+'</td><td class="r '+(x.type==='income'?'pos':'neg')+'">'+(x.type==='income'?'+':'−')+nbMoney(x.amount)+'</td><td>'+esc(x.note||'–')+'</td><td><div class="nb-actions"><button type="button" data-nb-edit="'+esc(x.id)+'">Bearbeiten</button><button type="button" class="danger" data-nb-del="'+esc(x.id)+'">Löschen</button></div></td></tr>').join('');
+ $('#nbRows').innerHTML=rows.map(x=>'<tr><td>'+fmtDate(x.date)+'</td><td><span class="nb-kind '+x.type+'">'+(x.type==='income'?'Einnahme':'Ausgabe')+'</span>'+(x.source==='budget'?'<div class="hint">Automatisch</div>':'')+'</td><td>'+esc(x.title)+'</td><td>'+esc(x.category||'–')+'</td><td class="r '+(x.type==='income'?'pos':'neg')+'">'+(x.type==='income'?'+':'−')+nbMoney(x.amount)+'</td><td>'+esc(x.note||'–')+'</td><td><div class="nb-actions">'+(x.source==='budget'?'<span class="hint">Aus Budget</span>':'<button type="button" data-nb-edit="'+esc(x.id)+'">Bearbeiten</button><button type="button" class="danger" data-nb-del="'+esc(x.id)+'">Löschen</button>')+'</div></td></tr>').join('');
  $('#nbEmpty').hidden=rows.length>0;
  nbRenderChart();
 }
