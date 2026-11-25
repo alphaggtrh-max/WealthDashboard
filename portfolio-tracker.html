@@ -1705,6 +1705,7 @@ function isCashAllocation(z){return /^(cash|sparen|saving|savings)$/i.test(Strin
 function budgetCashTotal(){return budgetData.incomes.reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0);}
 function cashTransferred(){return (state.transfers||[]).reduce((sum,t)=>sum+(Number(t.amount)||0),0);}
 function budgetCashBalance(){return Math.max(0,budgetCashTotal()+((state.cashAdjustments||[]).reduce((sum,x)=>sum+(Number(x.amount)||0),0))-cashTransferred());}
+ function budgetCashBalanceAt(date){const month=String(date||'').slice(0,7),allocated=budgetData.incomes.filter(x=>String(x.month||'')<=month).reduce((sum,x)=>sum+(x.spent||[]).reduce((v,z)=>v+(isCashAllocation(z)?Number(z.amount)||0:0),0),0),adjustments=(state.cashAdjustments||[]).filter(x=>String(x.date||'')<=date).reduce((sum,x)=>sum+(Number(x.amount)||0),0),transfers=(state.transfers||[]).filter(x=>String(x.date||'')<=date).reduce((sum,x)=>sum+(Number(x.amount)||0),0);return Math.max(0,allocated+adjustments-transfers);}
 function renderBudget(){
   const monthIncomes=budgetData.incomes.filter(x=>x.month===budgetMonth),extra=monthIncomes.reduce((a,x)=>a+x.amount,0);
   const extraSpent=monthIncomes.reduce((a,x)=>a+(x.spent||[]).reduce((v,z)=>v+z.amount,0),0);
