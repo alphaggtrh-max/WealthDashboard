@@ -2072,7 +2072,7 @@ function doTrading212Import(file,forcedPlanId){
           '\nDie CSV-Positionen werden diesem Topf zugeordnet. Andere Sparplan-Töpfe bleiben unverändert. Fortfahren?';
         if(!confirm(msg))return;
         const prev=JSON.stringify(state), mergedValues=Object.assign({},existingValues), plan=forcedPlan||t212GetPlan(planName), oldPlanAssets=state.assets.filter(a=>a.planId===plan.id), matchedPlanIds=new Set(planned.filter(x=>x.assetId).map(x=>x.assetId)), removedAssets=oldPlanAssets.filter(a=>!matchedPlanIds.has(a.id)), sales=t212AskSaleProceeds(removedAssets);
-        if(sales===null)return;const cashBefore=t212CashAt(snapshotDate),saleTotal=sales.reduce((sum,x)=>sum+x.amount,0);if(!Array.isArray(state.cashAdjustments))state.cashAdjustments=[];if(!Array.isArray(state.cashBasisAdjustments))state.cashBasisAdjustments=[];sales.forEach(x=>{const deposits=state.deposits.filter(d=>d.assetId===x.asset.id&&d.date<=snapshotDate),transfers=(state.transfers||[]).filter(t=>t.assetId===x.asset.id&&t.date<=snapshotDate),contribution=deposits.reduce((sum,d)=>sum+(Number(d.amount)||0),0),basis=contribution+transfers.reduce((sum,t)=>sum+(Number(t.amount)||0),0);if(x.amount>0)state.cashAdjustments.push({id:uid(),date:snapshotDate,amount:x.amount,note:'Sale of '+x.asset.name});if(Math.abs(basis)>0.005)state.cashBasisAdjustments.push({id:uid(),date:snapshotDate,basis:basis,contribution:contribution,note:'Invested basis retained from '+x.asset.name});});
+        if(sales===null)return;const cashBefore=t212CashAt(snapshotDate),saleTotal=sales.reduce((sum,x)=>sum+x.amount,0);let cashAvailableForPurchases=Math.max(0,cashBefore+saleTotal),cashUsedTotal=0;if(!Array.isArray(state.transfers))state.transfers=[];if(!Array.isArray(state.cashAdjustments))state.cashAdjustments=[];if(!Array.isArray(state.cashBasisAdjustments))state.cashBasisAdjustments=[];sales.forEach(x=>{const deposits=state.deposits.filter(d=>d.assetId===x.asset.id&&d.date<=snapshotDate),transfers=(state.transfers||[]).filter(t=>t.assetId===x.asset.id&&t.date<=snapshotDate),contribution=deposits.reduce((sum,d)=>sum+(Number(d.amount)||0),0),basis=contribution+transfers.reduce((sum,t)=>sum+(Number(t.amount)||0),0);if(x.amount>0)state.cashAdjustments.push({id:uid(),date:snapshotDate,amount:x.amount,note:'Sale of '+x.asset.name});if(Math.abs(basis)>0.005)state.cashBasisAdjustments.push({id:uid(),date:snapshotDate,basis:basis,contribution:contribution,note:'Invested basis retained from '+x.asset.name});});
         oldPlanAssets.forEach(a=>{a.planId='';a.planTarget=0;mergedValues[a.id]=0;});
         const matchedIds=new Set();
         holdings.forEach(h=>{
@@ -2082,9 +2082,14 @@ function doTrading212Import(file,forcedPlanId){
             asset={id:'t212_'+uid(),name:h.name,target:0,planId:plan.id,planTarget:0,color:colors[state.assets.length%colors.length],fx:false,units:h.units,lastPrice:h.units>0?h.value/h.units:0,currency:'EUR'};
             state.assets.push(asset);
           }else{asset.name=h.name;asset.planId=plan.id;asset.units=h.units;asset.lastPrice=h.units>0?h.value/h.units:0;asset.currency='EUR';}
-          const oldInvested=state.deposits.filter(d=>d.assetId===asset.id).reduce((sum,d)=>sum+Number(d.amount||0),0);
+          const oldInvested=state.deposits.filter(d=>d.assetId===asset.id).reduce((sum,d)=>sum+Number(d.amount||0),0)+(state.transfers||[]).filter(t=>t.assetId===asset.id).reduce((sum,t)=>sum+Number(t.amount||0),0);
           const delta=h.invested-oldInvested;
-          if(Math.abs(delta)>0.005)state.deposits.push({id:uid(),date:snapshotDate,assetId:asset.id,amount:delta});
+          if(delta>0.005){
+            const cashUsed=Math.min(cashAvailableForPurchases,delta);
+            if(cashUsed>0.005){state.transfers.push({id:uid(),date:snapshotDate,assetId:asset.id,amount:cashUsed,note:'CSV purchase from cash'});cashAvailableForPurchases-=cashUsed;cashUsedTotal+=cashUsed;}
+            const externalAmount=delta-cashUsed;
+            if(externalAmount>0.005)state.deposits.push({id:uid(),date:snapshotDate,assetId:asset.id,amount:externalAmount});
+          }else if(delta< -0.005){state.deposits.push({id:uid(),date:snapshotDate,assetId:asset.id,amount:delta});}
           mergedValues[asset.id]=h.value;
         });
         const planAssetIds=new Set([...oldPlanAssets.map(a=>a.id),...state.assets.filter(a=>a.planId===plan.id).map(a=>a.id)]);
@@ -2101,7 +2106,7 @@ function doTrading212Import(file,forcedPlanId){
             else delete s.values[id];
           });
         });
-        state.snapshots=state.snapshots.filter(x=>x.date!==snapshotDate);state.snapshots.push({date:snapshotDate,values:mergedValues,cash:Math.max(0,cashBefore+saleTotal)});
+        state.snapshots=state.snapshots.filter(x=>x.date!==snapshotDate);state.snapshots.push({date:snapshotDate,values:mergedValues,cash:Math.max(0,cashBefore+saleTotal-cashUsedTotal)});
         t212CleanupEmptyPlans(plan.id);syncPlanTargets();save();C=compute();renderActive(true);recordCsvImport(file,planName,'Portfolio-Snapshot',prev);
         toastUndo('Sparplan-Topf „'+plan.name+'“ aktualisiert ('+added+' neu, '+updated+' aktualisiert)',prev);
         return;
