@@ -2496,10 +2496,11 @@ function nbSyncBudget(){
  const income=Number(budgetData.income)||0;
  if(income>0)wanted.set('budget-income:'+month,{id:'nb_budget_income_'+month,source:'budget',sourceKey:'budget-income:'+month,type:'income',date,title:'Monatliches Nettoeinkommen',amount:Math.round(income*100)/100,category:'Nettoeinkommen',note:'Automatisch aus dem Monatsbudget übernommen'});
  (budgetData.expenses||[]).forEach(x=>{const amount=Number(x.amount)||0;if(amount>0)wanted.set('budget-expense:'+x.id+':'+month,{id:'nb_budget_expense_'+String(x.id)+'_'+month,source:'budget',sourceKey:'budget-expense:'+x.id+':'+month,type:'expense',date,title:String(x.name||'Fixkosten'),amount:Math.round(amount*100)/100,category:String(x.category||'Fixkosten'),note:'Automatisch aus den monatlichen Fixkosten übernommen'});});
- const generated=notebookEntries.filter(x=>x.source==='budget');
+ const generated=notebookEntries.filter(x=>x.source==='budget'&&nbMonth(x.date)===month);
+ const historical=notebookEntries.filter(x=>x.source==='budget'&&nbMonth(x.date)!==month);
  const manual=notebookEntries.filter(x=>x.source!=='budget');
  const oldByKey=new Map(generated.map(x=>[x.sourceKey,x]));
- const next=[...manual,...[...wanted].map(([key,value])=>({...oldByKey.get(key),...value}))];
+ const next=[...manual,...historical,...[...wanted].map(([key,value])=>({...oldByKey.get(key),...value}))];
  const changed=JSON.stringify(next)!==JSON.stringify(notebookEntries);
  if(changed){notebookEntries=next;nbSave();}
 }
