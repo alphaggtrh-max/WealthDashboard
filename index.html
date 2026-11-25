@@ -163,7 +163,7 @@ $('#nbExportJson').addEventListener('click',()=>nbDownload('finanz-notizbuch-'+n
 $('#nbDate').value=new Date().toISOString().slice(0,10);
 
 function renderImports(){const url=localStorage.getItem(BRIDGE)||'http://192.168.178.148:8765';$('#bridgeUrl').value=url;$('#snapshotCount').textContent=state.snapshots.length;$('#assetCount').textContent=state.assets.length;$('#depositCount').textContent=state.deposits.length;$('#snapshotDate').textContent=latest()?dateFmt(latest().date):'—'}
-function render(){if(page==='overview')renderOverview();if(page==='positions')renderPositions();if(page==='transactions')renderTransactions();if(page==='analytics')renderAnalytics();if(page==='imports')renderImports();if(page==='notebook')renderNotebook();if(page==='dividends')renderDividends()}
+function render(){if(page==='overview')renderOverview();if(page==='positions')renderPositions();if(page==='transactions')renderTransactions();if(page==='analytics')renderAnalytics();if(page==='imports')renderImports();if(page==='notebook')renderNotebook();}
 $$('[data-range]').forEach(b=>b.addEventListener('click',()=>{range=b.dataset.range;$$('[data-range]').forEach(x=>x.classList.toggle('active',x===b));chart()}));
 $$('[data-dim]').forEach(b=>b.addEventListener('click',()=>{dimension=b.dataset.dim;$$('[data-dim]').forEach(x=>x.classList.toggle('active',x===b));renderAnalytics()}));
 $('#positionSearch').addEventListener('input',renderPositions);$('#positionSort').addEventListener('change',renderPositions);$('#txFilter').addEventListener('change',renderTransactions);
